@@ -1,0 +1,45 @@
+{
+  "name": "SamWafWebVue3",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "prepare": "node -e \"if(require('fs').existsSync('.git')){process.exit(1)}\" || is-ci || husky install"
+  },
+  "dependencies": {
+    "@microsoft/fetch-event-source": "^2.0.1",
+    "axios": "^1.17.0",
+    "codemirror": "^6.0.2",
+    "crypto-js": "^4.2.0",
+    "dayjs": "^1.11.21",
+    "dompurify": "^3.4.8",
+    "echarts": "^5.6.0",
+    "echarts-wordcloud": "^2.1.0",
+    "marked": "^18.0.5",
+    "nprogress": "^0.2.0",
+    "pinia": "^3.0.4",
+    "qrcode.vue": "^3.9.1",
+    "tdesign-icons-vue-next": "latest",
+    "tdesign-vue-next": "latest",
+    "uuid": "^14.0.0",
+    "vite-svg-loader": "^5.1.0",
+    "vue": "^3.4.21",
+    "vue-codemirror": "^6.1.1",
+    "vue-i18n": "^9.14.5",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@types/crypto-js": "^4.2.2",
+    "@types/nprogress": "^0.2.3",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-vue": "^5.0.4",
+    "terser": "^5.48.0",
+    "typescript": "^5.4.4",
+    "vite": "^5.2.8",
+    "vue-tsc": "^2.0.10"
+  },
+  "description": "SamWafWebVue3 Version"
+}

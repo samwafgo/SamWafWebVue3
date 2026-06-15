@@ -1,0 +1,496 @@
+<template>
+  <div>
+    <t-card class="list-card-container">
+      <t-row justify="space-between">
+        <div class="left-operation-container">
+          <t-button @click="handleAddAccount"> {{ t('page.account.create_account') }} </t-button>
+        </div>
+        <div class="right-operation-container">
+          <t-form ref="searchForm" :data="searchformData" :label-width="120" colon layout="inline" :style="{ marginBottom: '8px' }">
+            <t-form-item :label="t('page.account.login_account_label')" name="login_account">
+              <t-input v-model="searchformData.login_account" :placeholder="t('common.placeholder_content')" clearable> </t-input>
+            </t-form-item>
+            <t-form-item>
+              <t-button theme="primary" :style="{ marginLeft: '8px' }" @click="getList('all')"> {{ t('common.search') }} </t-button>
+            </t-form-item>
+          </t-form>
+        </div>
+      </t-row>
+
+      <div class="table-container">
+        <t-table
+          :columns="columns"
+          :data="data"
+          :row-key="rowKey"
+          vertical-align="top"
+          hover
+          :pagination="pagination"
+          :selected-row-keys="selectedRowKeys"
+          :loading="dataLoading"
+          @page-change="rehandlePageChange"
+          @select-change="rehandleSelectChange"
+        >
+          <template #op="slotProps">
+            <a class="t-button-link" @click="handleClickResetPwd(slotProps)">{{ t('page.account.reset_password') }}</a>
+            <a class="t-button-link" @click="handleClickResetOtp(slotProps)">{{ t('page.account.reset_otp') }}</a>
+            <a class="t-button-link" @click="handleClickEdit(slotProps)">{{ t('common.edit') }}</a>
+            <a class="t-button-link" @click="handleClickDelete(slotProps)">{{ t('common.delete') }}</a>
+          </template>
+        </t-table>
+      </div>
+    </t-card>
+
+    <!-- 新建账号弹窗 -->
+    <t-dialog v-model:visible="addFormVisible" :header="t('page.account.create_account')" :width="680" :footer="false">
+      <t-form ref="addForm" :data="formData" :rules="rules" :label-width="150" @submit="onSubmit">
+        <t-form-item :label="t('page.account.login_account_label')" name="login_account">
+          <t-input
+            v-model="formData.login_account"
+            :style="{ width: '480px' }"
+            :placeholder="t('common.placeholder') + t('page.account.login_account_label')"
+          ></t-input>
+        </t-form-item>
+        <t-form-item :label="t('page.account.role')" name="role">
+          <t-select v-model="formData.role" clearable :style="{ width: '480px' }">
+            <t-option v-for="(item, index) in roleType" :key="index" :value="item.value" :label="item.label">
+              {{ item.label }}
+            </t-option>
+          </t-select>
+        </t-form-item>
+        <t-form-item :label="t('page.account.login_password')" name="login_password">
+          <t-input
+            v-model="formData.login_password"
+            :style="{ width: '480px' }"
+            type="password"
+            :placeholder="t('common.placeholder') + t('page.account.login_password')"
+          ></t-input>
+        </t-form-item>
+        <t-form-item :label="t('common.status')" name="status">
+          <t-input-number
+            v-model="formData.status"
+            :style="{ width: '480px' }"
+            :placeholder="t('common.placeholder') + t('common.status')"
+          ></t-input-number>
+        </t-form-item>
+        <t-form-item :label="t('common.remarks')" name="remarks">
+          <t-textarea
+            v-model="formData.remarks"
+            :style="{ width: '480px' }"
+            :placeholder="t('common.placeholder') + t('common.remarks')"
+            name="remarks"
+          >
+          </t-textarea>
+        </t-form-item>
+        <t-form-item style="float: right">
+          <t-button variant="outline" @click="onClickCloseBtn">{{ t('common.close') }}</t-button>
+          <t-button theme="primary" type="submit">{{ t('common.confirm') }}</t-button>
+        </t-form-item>
+      </t-form>
+    </t-dialog>
+
+    <!-- 编辑账号弹窗 -->
+    <t-dialog v-model:visible="editFormVisible" :header="t('common.edit')" :width="680" :footer="false">
+      <t-form ref="editForm" :data="formEditData" :rules="rules" :label-width="150" @submit="onSubmitEdit">
+        <t-form-item :label="t('page.account.login_account_label')" name="login_account">
+          <t-input
+            v-model="formEditData.login_account"
+            :style="{ width: '480px' }"
+            :placeholder="t('common.placeholder') + t('page.account.login_account_label')"
+          ></t-input>
+        </t-form-item>
+        <t-form-item :label="t('common.status')" name="status">
+          <t-input-number
+            v-model="formEditData.status"
+            :style="{ width: '480px' }"
+            :placeholder="t('common.placeholder') + t('common.status')"
+          ></t-input-number>
+        </t-form-item>
+        <t-form-item :label="t('common.remarks')" name="remarks">
+          <t-textarea
+            v-model="formEditData.remarks"
+            :style="{ width: '480px' }"
+            :placeholder="t('common.placeholder') + t('common.remarks')"
+            name="remarks"
+          >
+          </t-textarea>
+        </t-form-item>
+        <t-form-item style="float: right">
+          <t-button variant="outline" @click="onClickCloseEditBtn">{{ t('common.close') }}</t-button>
+          <t-button theme="primary" type="submit">{{ t('common.confirm') }}</t-button>
+        </t-form-item>
+      </t-form>
+    </t-dialog>
+
+    <!-- 重置密码弹窗 -->
+    <t-dialog v-model:visible="resetPwdFormVisible" :header="t('page.account.reset_password')" :width="680" :footer="false">
+      <t-form ref="resetPwdForm" :data="formResetPwdData" :rules="resetPwdRules" :label-width="150" @submit="onSubmitResetPwd">
+        <t-form-item :label="t('page.account.login_account_label')" name="login_account">
+          <t-input
+            v-model="formResetPwdData.login_account"
+            :style="{ width: '480px' }"
+            :placeholder="t('common.placeholder') + t('page.account.login_account_label')"
+          ></t-input>
+        </t-form-item>
+        <t-form-item :label="t('page.account.super_admin_password')" name="login_super_password">
+          <t-input
+            v-model="formResetPwdData.login_super_password"
+            :style="{ width: '480px' }"
+            type="password"
+            :placeholder="t('common.placeholder') + t('page.account.super_admin_password')"
+          ></t-input>
+        </t-form-item>
+        <t-form-item :label="t('page.account.new_password')" name="login_new_password">
+          <t-input
+            v-model="formResetPwdData.login_new_password"
+            :style="{ width: '480px' }"
+            type="password"
+            :placeholder="t('common.placeholder') + t('page.account.new_password')"
+          ></t-input>
+        </t-form-item>
+        <t-form-item :label="t('page.account.confirm_password')" name="login_new_password2">
+          <t-input
+            v-model="formResetPwdData.login_new_password2"
+            :style="{ width: '480px' }"
+            type="password"
+            :placeholder="t('common.placeholder') + t('page.account.confirm_password')"
+          ></t-input>
+        </t-form-item>
+        <t-form-item style="float: right">
+          <t-button variant="outline" @click="resetPwdFormVisible = false">{{ t('common.close') }}</t-button>
+          <t-button theme="primary" type="submit">{{ t('common.confirm') }}</t-button>
+        </t-form-item>
+      </t-form>
+    </t-dialog>
+
+    <t-dialog
+      v-model:visible="confirmVisible"
+      :header="t('common.confirm_delete')"
+      :body="confirmBody"
+      :on-cancel="onCancel"
+      @confirm="onConfirmDelete"
+    >
+    </t-dialog>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { MessagePlugin } from 'tdesign-vue-next';
+import type { FormProps, PageInfo, TableProps } from 'tdesign-vue-next';
+
+import {
+  account_add_api,
+  account_del_api,
+  account_detail_api,
+  account_edit_api,
+  account_list_api,
+  account_reset_2fa_api,
+  account_reset_pwd_api,
+} from '@/apis/account';
+
+const { t } = useI18n();
+
+const INITIAL_DATA = {
+  login_account: '',
+  login_password: '',
+  role: '',
+  status: 1,
+  remarks: '',
+};
+
+const addFormVisible = ref(false);
+const editFormVisible = ref(false);
+const confirmVisible = ref(false);
+const resetPwdFormVisible = ref(false);
+const formData = ref<Record<string, any>>({ ...INITIAL_DATA });
+const formEditData = ref<Record<string, any>>({ ...INITIAL_DATA });
+const formResetPwdData = ref({
+  login_account: '',
+  login_super_password: '',
+  login_new_password: '',
+  login_new_password2: '',
+  id: '',
+});
+
+const rules: FormProps['rules'] = {
+  login_account: [
+    { required: true, message: t('common.placeholder') + t('page.account.login_account_label'), type: 'error' },
+  ],
+  login_password: [{ required: true, message: t('common.placeholder') + t('page.account.login_password'), type: 'error' }],
+};
+
+const resetPwdRules: FormProps['rules'] = {
+  login_account: [
+    { required: true, message: t('common.placeholder') + t('page.account.login_account_label'), type: 'error' },
+  ],
+  login_super_password: [
+    { required: true, message: t('common.placeholder') + t('page.account.super_admin_password'), type: 'error' },
+  ],
+  login_new_password: [{ required: true, message: t('common.placeholder') + t('page.account.new_password'), type: 'error' }],
+  login_new_password2: [
+    { required: true, message: t('common.placeholder') + t('page.account.confirm_password'), type: 'error' },
+  ],
+};
+
+const roleType = computed(() => [
+  { label: t('page.account.role_super_admin'), value: 'superAdmin' },
+  { label: t('page.account.role_admin'), value: 'admin' },
+]);
+
+const dataLoading = ref(false);
+const data = ref<Record<string, any>[]>([]);
+const selectedRowKeys = ref<(string | number)[]>([]);
+const rowKey = 'code';
+
+const columns = computed<TableProps['columns']>(() => [
+  { title: t('page.account.login_account_label'), align: 'left', width: 250, ellipsis: true, colKey: 'login_account' },
+  { title: t('page.account.role'), align: 'left', width: 250, ellipsis: true, colKey: 'role' },
+  { title: t('common.remarks'), width: 200, ellipsis: true, colKey: 'remarks' },
+  { title: t('common.create_time'), width: 200, ellipsis: true, colKey: 'create_time' },
+  { align: 'left', width: 200, colKey: 'op', title: t('common.op') },
+]);
+
+const pagination = reactive({
+  total: 0,
+  current: 1,
+  pageSize: 10,
+});
+
+const searchformData = reactive({
+  login_account: '',
+});
+
+const deleteIdx = ref(-1);
+
+const confirmBody = computed(() => {
+  if (deleteIdx.value > -1) {
+    return t('common.data_delete_warning');
+  }
+  return '';
+});
+
+onMounted(() => {
+  getList('');
+});
+
+function getList(keyword?: string) {
+  if (keyword === 'all') {
+    pagination.current = 1;
+  }
+  dataLoading.value = true;
+  account_list_api({
+    pageSize: pagination.pageSize,
+    pageIndex: pagination.current,
+    ...searchformData,
+  })
+    .then((res) => {
+      if (res.code === 0) {
+        data.value = res.data.list ?? [];
+        pagination.total = res.data.total;
+      }
+    })
+    .catch((e: Error) => {
+      console.log(e);
+    })
+    .finally(() => {
+      dataLoading.value = false;
+    });
+}
+
+function rehandlePageChange(curr: PageInfo) {
+  pagination.current = curr.current;
+  if (pagination.pageSize !== curr.pageSize) {
+    pagination.current = 1;
+    pagination.pageSize = curr.pageSize;
+  }
+  getList('');
+}
+
+function rehandleSelectChange(val: (string | number)[]) {
+  selectedRowKeys.value = val;
+}
+
+function handleClickEdit(e: { row: Record<string, any> }) {
+  const { id } = e.row;
+  editFormVisible.value = true;
+  getDetail(id);
+}
+
+function handleAddAccount() {
+  addFormVisible.value = true;
+  formData.value = { ...INITIAL_DATA };
+}
+
+function handleClickResetPwd(e: { row: Record<string, any> }) {
+  const { id } = e.row;
+  resetPwdFormVisible.value = true;
+  getDetailModifyPwd(id);
+}
+
+function handleClickResetOtp(e: { row: Record<string, any> }) {
+  const { login_account } = e.row;
+  account_reset_2fa_api({ login_account }).then((res) => {
+    if (res.code === 0) {
+      MessagePlugin.success(res.msg);
+      getList('');
+    } else {
+      MessagePlugin.warning(res.msg);
+    }
+  });
+}
+
+const onSubmit: FormProps['onSubmit'] = ({ firstError }) => {
+  if (!firstError) {
+    account_add_api({ ...formData.value })
+      .then((res) => {
+        if (res.code === 0) {
+          MessagePlugin.success(res.msg);
+          addFormVisible.value = false;
+          pagination.current = 1;
+          getList('');
+        } else {
+          MessagePlugin.warning(res.msg);
+        }
+      })
+      .catch((e: Error) => {
+        console.log(e);
+      });
+  } else {
+    MessagePlugin.warning(firstError);
+  }
+};
+
+const onSubmitEdit: FormProps['onSubmit'] = ({ firstError }) => {
+  if (!firstError) {
+    account_edit_api({ ...formEditData.value })
+      .then((res) => {
+        if (res.code === 0) {
+          MessagePlugin.success(res.msg);
+          editFormVisible.value = false;
+          getList('');
+        } else {
+          MessagePlugin.warning(res.msg);
+        }
+      })
+      .catch((e: Error) => {
+        console.log(e);
+      });
+  } else {
+    MessagePlugin.warning(firstError);
+  }
+};
+
+/** 重置密码 */
+const onSubmitResetPwd: FormProps['onSubmit'] = ({ firstError }) => {
+  if (!firstError) {
+    if (formResetPwdData.value.login_new_password !== formResetPwdData.value.login_new_password2) {
+      MessagePlugin.warning(t('page.account.password_mismatch_warning'));
+      return;
+    }
+    account_reset_pwd_api({ ...formResetPwdData.value })
+      .then((res) => {
+        if (res.code === 0) {
+          MessagePlugin.success(res.msg);
+          resetPwdFormVisible.value = false;
+          formResetPwdData.value.login_super_password = '';
+          formResetPwdData.value.login_new_password = '';
+          formResetPwdData.value.login_new_password2 = '';
+          pagination.current = 1;
+          getList('');
+        } else {
+          MessagePlugin.warning(res.msg);
+        }
+      })
+      .catch((e: Error) => {
+        console.log(e);
+      });
+  } else {
+    MessagePlugin.warning(firstError);
+  }
+};
+
+function onClickCloseBtn() {
+  addFormVisible.value = false;
+  formData.value = { ...INITIAL_DATA };
+}
+
+function onClickCloseEditBtn() {
+  editFormVisible.value = false;
+  formEditData.value = { ...INITIAL_DATA };
+}
+
+function handleClickDelete(e: { rowIndex: number }) {
+  deleteIdx.value = e.rowIndex;
+  confirmVisible.value = true;
+}
+
+function onConfirmDelete() {
+  confirmVisible.value = false;
+  const { id } = data.value[deleteIdx.value];
+  account_del_api({ id })
+    .then((res) => {
+      if (res.code === 0) {
+        getList('');
+        MessagePlugin.success(res.msg);
+      } else {
+        MessagePlugin.warning(res.msg);
+      }
+    })
+    .catch((e: Error) => {
+      console.log(e);
+    });
+  resetIdx();
+}
+
+function onCancel() {
+  resetIdx();
+}
+
+function resetIdx() {
+  deleteIdx.value = -1;
+}
+
+function getDetail(id: string | number) {
+  account_detail_api({ id })
+    .then((res) => {
+      if (res.code === 0) {
+        formEditData.value = { ...res.data };
+      }
+    })
+    .catch((e: Error) => {
+      console.log(e);
+    });
+}
+
+function getDetailModifyPwd(id: string | number) {
+  account_detail_api({ id })
+    .then((res) => {
+      if (res.code === 0) {
+        formResetPwdData.value.login_account = res.data.login_account;
+        formResetPwdData.value.id = String(id);
+        formResetPwdData.value.login_super_password = '';
+        formResetPwdData.value.login_new_password = '';
+        formResetPwdData.value.login_new_password2 = '';
+      }
+    })
+    .catch((e: Error) => {
+      console.log(e);
+    });
+}
+</script>
+
+<style scoped>
+.left-operation-container {
+  padding: 0 0 6px 0;
+  margin-bottom: 16px;
+}
+
+.search-input {
+  width: 360px;
+}
+
+.t-button + .t-button {
+  margin-left: 8px;
+}
+</style>
