@@ -183,7 +183,7 @@
           </t-form-item>
           <t-form-item>
             <t-button theme="primary" :style="{ marginLeft: '8px' }" @click="getList('all')"> {{ t('common.search') }} </t-button>
-            <t-button v-if="attack_ip === ''" theme="primary" :style="{ marginLeft: '8px' }" @click="exportDbVisible = true">
+            <t-button v-if="attack_ip === '' && isFileBasedDb" theme="primary" :style="{ marginLeft: '8px' }" @click="exportDbVisible = true">
               {{ t('common.export') }}
             </t-button>
             <t-button type="reset" variant="base" theme="default"> {{ t('common.reset') }} </t-button>
@@ -746,6 +746,8 @@ const filters = reactive({
 const host_dic = reactive<Record<string, string>>({});
 const share_db_dic = reactive<Record<string, string>>({});
 const exportDbVisible = ref(false);
+// 当前是否为文件型数据库(SQLite)：仅 SQLite 支持日志文件导出，MySQL 隐藏导出按钮
+const isFileBasedDb = ref(true);
 const visitDetailVisible = ref(false); // 访问详情弹窗
 const visitDetailUid = ref(''); // 访问详情id
 
@@ -927,9 +929,20 @@ function loadShareDbList() {
     .then((res) => {
       if (res.code === 0) {
         const shareOptions = res.data;
+        let currentName = '';
         for (let i = 0; i < shareOptions.length; i++) {
           share_db_dic[shareOptions[i].file_name] = `${shareOptions[i].file_name}(${shareOptions[i].cnt})`;
+          // 后端按驱动标记当前(实时)分片：SQLite=local_log.db，MySQL=web_logs
+          if (shareOptions[i].is_current) {
+            currentName = shareOptions[i].file_name;
+          }
         }
+        // 默认选中当前驱动的实时分片，避免 MySQL 下仍显示 SQLite 味的 local_log.db
+        if (currentName !== '') {
+          searchformData.value.current_db_name = currentName;
+        }
+        // 文件型(SQLite)实时分片名以 .db 结尾；MySQL 为 web_logs(无后缀)。据此决定是否显示导出按钮
+        isFileBasedDb.value = currentName === '' || currentName.endsWith('.db');
       }
     })
     .catch((e: Error) => {

@@ -20,6 +20,26 @@
           </div>
 
           <div class="monitor-data" :class="{ 'data-loading': loading }">
+            <!-- 运行环境：数据库 / 缓存（含连接目标与切换方式） -->
+            <div class="env-section">
+              <div class="section-title">{{ t('topNav.runtime_env') }}</div>
+              <div class="env-row">
+                <span class="item-label">{{ t('topNav.runtime_db') }}</span>
+                <span class="item-value">{{ dbDetail }}</span>
+              </div>
+              <div class="env-row">
+                <span class="item-label">{{ t('topNav.runtime_cache') }}</span>
+                <span class="item-value">{{ cacheDetail }}</span>
+              </div>
+              <div class="env-tip">
+                <div>{{ t('topNav.runtime_switch_tip') }}</div>
+                <div class="env-migrate">
+                  {{ t('topNav.runtime_migrate_tip') }}
+                  <t-link theme="primary" hover="color" @click="openWechat">{{ t('topNav.wechat_account_name') }}</t-link>
+                </div>
+              </div>
+            </div>
+
             <!-- CPU信息 -->
             <div class="monitor-item">
               <div class="item-header">
@@ -64,6 +84,8 @@
 
     <!-- 触发器 - 直观显示系统状态 -->
     <div class="system-monitor-trigger" @click="isMonitorVisible = true">
+      <!-- 系统整体状态灯（绿/黄/橙/红，悬浮查看含义） -->
+      <div class="status-indicator" :class="overallStatusClass" :title="t('topNav.overall_status')"></div>
       <div class="monitor-display">
         <div class="monitor-item-inline">
           <span class="label">CPU</span>
@@ -77,8 +99,16 @@
           <span class="label">{{ t('topNav.disk') }}</span>
           <span class="value" :style="{ color: getUsageColor(averageDiskUsage) }"> {{ averageDiskUsage }}% </span>
         </div>
+        <!-- 数据库 / 缓存（仅显示类型，详情见悬浮面板） -->
+        <div class="monitor-item-inline">
+          <span class="label">{{ t('topNav.runtime_db') }}</span>
+          <span class="value env-text">{{ dbLabel }}</span>
+        </div>
+        <div class="monitor-item-inline">
+          <span class="label">{{ t('topNav.runtime_cache') }}</span>
+          <span class="value env-text">{{ cacheLabel }}</span>
+        </div>
       </div>
-      <div class="status-indicator" :class="overallStatusClass"></div>
     </div>
   </t-popup>
 </template>
@@ -90,15 +120,46 @@ import { useI18n } from 'vue-i18n';
 import { RefreshIcon } from 'tdesign-icons-vue-next';
 
 import { getSystemMonitorApi } from '@/apis/monitor';
+import { GetSystemParamsApi } from '@/apis/sysinfo';
 import { useStatsStore } from '@/store/modules/stats';
 
 const { t } = useI18n();
 const router = useRouter();
 const statsStore = useStatsStore();
 
+const emit = defineEmits<{ (e: 'open-wechat'): void }>();
+
 const loading = ref(false);
 const error = ref(false);
 const isMonitorVisible = ref(false);
+
+// 运行环境：数据库(sqlite|mysql) / 缓存(memory|redis)
+const dbInfo = ref<Record<string, any>>({ driver: '' });
+const cacheInfo = ref<Record<string, any>>({ type: '' });
+const dbLabel = computed(() => {
+  const d = dbInfo.value;
+  if (d.driver === 'mysql') return 'MySQL';
+  if (!d.driver) return '-';
+  return 'SQLite';
+});
+const cacheLabel = computed(() => {
+  const c = cacheInfo.value;
+  if (c.type === 'redis') return 'Redis';
+  if (!c.type) return '-';
+  return 'Memory';
+});
+const dbDetail = computed(() => {
+  const d = dbInfo.value;
+  if (d.driver === 'mysql') return d.host ? `MySQL (${d.host}:${d.port})` : 'MySQL';
+  if (!d.driver) return '-';
+  return 'SQLite';
+});
+const cacheDetail = computed(() => {
+  const c = cacheInfo.value;
+  if (c.type === 'redis') return c.host ? `Redis (${c.host}:${c.port})` : 'Redis';
+  if (!c.type) return '-';
+  return 'Memory';
+});
 
 const cpuUsage = computed(() => Math.round(statsStore.getCpuUsage));
 const memoryUsage = computed(() => Math.round(statsStore.getMemoryUsage));
@@ -115,6 +176,15 @@ const overallStatusClass = computed(() => {
 
 onMounted(() => {
   fetchSystemInfo();
+  // 当前运行环境（数据库/缓存）
+  GetSystemParamsApi()
+    .then((res) => {
+      if (res.code === 0) {
+        dbInfo.value = res.data?.database || { driver: '' };
+        cacheInfo.value = res.data?.cache || { type: '' };
+      }
+    })
+    .catch(() => {});
 });
 
 function onPopupVisibleChange(visible: boolean, context: any) {
@@ -157,6 +227,12 @@ function refreshData() {
 function goToMonitorPage() {
   router.push('/dashboard/stats');
   isMonitorVisible.value = false;
+}
+
+// 打开微信公众号二维码（复用头部的二维码弹窗）
+function openWechat() {
+  isMonitorVisible.value = false;
+  emit('open-wechat');
 }
 
 // 根据使用率获取颜色
@@ -243,6 +319,45 @@ function getUsageColor(percentage: number) {
   color: var(--td-brand-color);
   line-height: 48px;
   cursor: pointer;
+}
+
+/* 运行环境区（数据库/缓存）样式 */
+.env-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--td-component-border);
+}
+
+.env-section .section-title {
+  font-size: 14px;
+  color: var(--td-text-color-secondary);
+  font-weight: 500;
+}
+
+.env-section .env-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.env-section .env-tip {
+  font-size: 12px;
+  color: var(--td-text-color-placeholder);
+  line-height: 1.5;
+}
+
+.env-section .env-migrate {
+  margin-top: 4px;
+}
+
+/* 触发器内联的数据库/缓存文本（非百分比，取消等宽右对齐与最小宽度） */
+.monitor-item-inline .value.env-text {
+  font-family: inherit;
+  min-width: 0;
+  text-align: left;
+  color: var(--td-text-color-primary);
 }
 
 /* 监控项样式 */

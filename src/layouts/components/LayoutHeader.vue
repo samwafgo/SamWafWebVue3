@@ -16,7 +16,7 @@
     <search v-if="!settingStore.isMobile" />
 
     <!-- 系统监控（移动端隐藏） -->
-    <system-monitor-widget v-if="!settingStore.isMobile" />
+    <system-monitor-widget v-if="!settingStore.isMobile" @open-wechat="wechatVisible = true" />
 
     <!-- 全局通知 -->
     <notice />
