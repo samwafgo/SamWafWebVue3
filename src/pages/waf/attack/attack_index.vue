@@ -210,7 +210,8 @@ onMounted(() => {
 
 function getIpTags() {
   allattacktaglist({}).then((res) => {
-    attackTags.value = res.data ?? [];
+    // 后端出错时 data 可能是对象/字符串而非数组，需兜底成数组，避免 unshift 报错触发前端异常弹窗
+    attackTags.value = Array.isArray(res.data) ? res.data : [];
     attackTags.value.unshift({ label: '所有规则', value: '' });
   });
 }
