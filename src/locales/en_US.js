@@ -2821,8 +2821,11 @@ export default {
       normal_rate: "Normal Rate",
       legend_attack: "Attacks Blocked",
       preset_today: "Today",
+      preset_yesterday: "Yesterday",
+      preset_last_3_days: "Last 3 Days",
       preset_last_7_days: "Last 7 Days",
       preset_last_30_days: "Last 30 Days",
+      refresh: "Refresh",
     },
   },
 };

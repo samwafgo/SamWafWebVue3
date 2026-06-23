@@ -2829,8 +2829,11 @@ export default {
       normal_rate: "正常流量占比",
       legend_attack: "已拦截攻击",
       preset_today: "今天",
+      preset_yesterday: "昨天",
+      preset_last_3_days: "最近3天",
       preset_last_7_days: "最近7天",
       preset_last_30_days: "最近30天",
+      refresh: "刷新",
     },
   }
 };
