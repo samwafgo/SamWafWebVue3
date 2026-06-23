@@ -41,7 +41,6 @@ export default {
     data_delete_warning: "删除后，数据将被删除，且无法恢复",
     create_time: "创建时间",
     update_time: "更新时间",
-    op: "操作内容",
     date: "日期",
     online_document: "在线文档",
     online_channel: "在线交流渠道",
@@ -993,7 +992,6 @@ export default {
         add_header: '添加头信息',
         insert_variable: '插入变量',
       },
-      tab_custom_response_headers: "自定义响应头",
       custom_response_headers: {
         is_enable: '是否开启自定义响应头',
         is_enable_tips: '开启后将在返回给客户端的响应中添加自定义的HTTP头信息',
@@ -2619,7 +2617,6 @@ export default {
       delete_failed: "删除失败",
       delete_confirm: "确认删除该订阅吗？",
       already_subscribed: "该渠道已订阅此消息类型",
-      batch_add_success: "批量添加成功，共添加 {count} 个订阅",
       batch_add_partial_success: "部分添加成功，成功 {success} 个，失败 {failed} 个",
       select_message_types: "请至少选择一个消息类型",
       channel_placeholder: "请选择通知渠道",
