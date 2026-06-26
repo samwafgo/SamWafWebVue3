@@ -875,17 +875,41 @@ function handleColumnControllerCancel() {
 function loadColumnConfig() {
   try {
     const savedConfig = localStorage.getItem('attack_table_display_columns');
-    if (savedConfig) {
-      const parsedConfig = JSON.parse(savedConfig);
-      if (Array.isArray(parsedConfig) && parsedConfig.length > 0) {
-        // 合并新增的默认列：保留用户已选列，同时让新功能列（如 ai_score）自动出现
-        const merged = [...parsedConfig];
-        defaultDisplayColumns.forEach((col) => {
-          if (!merged.includes(col)) merged.push(col);
-        });
-        displayColumns.value = merged;
-      }
+    if (!savedConfig) {
+      return;
     }
+    const parsedConfig = JSON.parse(savedConfig);
+    if (!Array.isArray(parsedConfig) || parsedConfig.length === 0) {
+      return;
+    }
+
+    // 全部可选列（列配置弹窗里能勾选的字段）
+    const allFieldKeys = availableFields.value.map((f) => f.value);
+    // 用户上次见过的可选列集合，用于区分"用户主动取消的列"和"程序新增的列"
+    let knownKeys: string[] = [];
+    try {
+      const parsedKnown = JSON.parse(localStorage.getItem('attack_table_known_columns') || 'null');
+      if (Array.isArray(parsedKnown)) knownKeys = parsedKnown;
+    } catch (e) {
+      knownKeys = [];
+    }
+
+    const merged = [...parsedConfig];
+    if (knownKeys.length === 0) {
+      // 兼容旧缓存（无 known 记录）：仅此一次按默认列补齐，之后以 known 记录为准
+      defaultDisplayColumns.forEach((col) => {
+        if (!merged.includes(col)) merged.push(col);
+      });
+    } else {
+      // 仅自动加入"用户从未见过的新功能列"（如新增的 ai_score），
+      // 用户主动取消勾选的列刷新后不再被强行加回
+      allFieldKeys.forEach((col) => {
+        if (!knownKeys.includes(col) && !merged.includes(col)) merged.push(col);
+      });
+    }
+    displayColumns.value = merged;
+    // 记录当前全部可选列，作为下次判断"新列"的基线
+    localStorage.setItem('attack_table_known_columns', JSON.stringify(allFieldKeys));
   } catch (error) {
     console.error(t('common.column_config_load_failed'), error);
     displayColumns.value = [...defaultDisplayColumns];
