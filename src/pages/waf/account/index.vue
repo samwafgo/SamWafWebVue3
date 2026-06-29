@@ -98,6 +98,13 @@
             :placeholder="t('common.placeholder') + t('page.account.login_account_label')"
           ></t-input>
         </t-form-item>
+        <t-form-item :label="t('page.account.role')" name="role">
+          <t-select v-model="formEditData.role" clearable :style="{ width: '480px' }">
+            <t-option v-for="(item, index) in roleType" :key="index" :value="item.value" :label="item.label">
+              {{ item.label }}
+            </t-option>
+          </t-select>
+        </t-form-item>
         <t-form-item :label="t('common.status')" name="status">
           <t-input-number
             v-model="formEditData.status"
@@ -235,7 +242,9 @@ const resetPwdRules: FormProps['rules'] = {
 
 const roleType = computed(() => [
   { label: t('page.account.role_super_admin'), value: 'superAdmin' },
-  { label: t('page.account.role_admin'), value: 'admin' },
+  { label: t('page.account.role_system_admin'), value: 'systemAdmin' },
+  { label: t('page.account.role_security_admin'), value: 'securityAdmin' },
+  { label: t('page.account.role_audit_admin'), value: 'auditAdmin' },
 ]);
 
 const dataLoading = ref(false);

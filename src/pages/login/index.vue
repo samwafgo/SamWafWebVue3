@@ -48,6 +48,15 @@
       </t-form>
     </div>
 
+    <!-- 首次登录/口令到期 强制改密弹窗 -->
+    <change-password-dialog
+      v-model:visible="showChangePwd"
+      :forced="true"
+      :reason="changePwdReason"
+      :preset-old-password="formData.password"
+      @success="onChangePwdSuccess"
+    />
+
     <footer class="copyright">
       Copyright @ 2022-{{ new Date().getFullYear() }} SamWaf. All Rights Reserved
       <t-link theme="primary" @click="handleJumpOnlineUrl">{{ t('login.login_has_question') }}</t-link>
@@ -66,6 +75,7 @@ import { useUserStore } from '@/store/modules/user';
 import { CODE } from '@/utils/request';
 import { getSafeRedirectUrl } from '@/constants';
 import { getOnlineUrl } from '@/utils/usuallytool';
+import ChangePasswordDialog from '@/pages/waf/account/components/ChangePasswordDialog.vue';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -75,6 +85,8 @@ const userStore = useUserStore();
 const loading = ref(false);
 const showPsw = ref(false);
 const showSecretCode = ref(false);
+const showChangePwd = ref(false);
+const changePwdReason = ref('');
 
 const formData = reactive({
   account: '',
@@ -97,6 +109,12 @@ const onSubmit: FormProps['onSubmit'] = async ({ validateResult }) => {
       login_otp_secret_code: formData.secretCode,
     });
     if (res.code === CODE.REQUEST_SUCCESS) {
+      // 首次登录/口令到期：强制改密，改密成功后再进入系统
+      if (res.data?.need_change_password) {
+        changePwdReason.value = res.data.change_password_reason || '';
+        showChangePwd.value = true;
+        return;
+      }
       MessagePlugin.success(t('login.login_success'));
       const redirect = (route.query.redirect as string) || getSafeRedirectUrl();
       router.replace(redirect);
@@ -114,6 +132,13 @@ const onSubmit: FormProps['onSubmit'] = async ({ validateResult }) => {
     loading.value = false;
   }
 };
+
+// 强制改密成功后进入系统
+function onChangePwdSuccess() {
+  MessagePlugin.success(t('login.login_success'));
+  const redirect = (route.query.redirect as string) || getSafeRedirectUrl();
+  router.replace(redirect);
+}
 
 function handleJumpOnlineUrl() {
   window.open(getOnlineUrl());

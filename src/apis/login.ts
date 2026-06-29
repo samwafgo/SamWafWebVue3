@@ -8,6 +8,8 @@ export interface LoginParams {
 
 export interface LoginResult {
   access_token: string;
+  need_change_password?: boolean;
+  change_password_reason?: string;
   [key: string]: any;
 }
 

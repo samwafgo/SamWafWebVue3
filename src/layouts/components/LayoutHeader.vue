@@ -150,6 +150,9 @@
         </div>
       </div>
     </t-dialog>
+
+    <!-- 个人自助修改密码 -->
+    <change-password-dialog v-model:visible="showChangePwd" :forced="false" />
   </div>
 </template>
 
@@ -180,6 +183,7 @@ import { getOnlineUrl } from '@/utils/usuallytool';
 import Notice from './Notice.vue';
 import Search from './Search.vue';
 import SystemMonitorWidget from './SystemMonitorWidget.vue';
+import ChangePasswordDialog from '@/pages/waf/account/components/ChangePasswordDialog.vue';
 
 const router = useRouter();
 const { t, locale } = useI18n();
@@ -219,11 +223,15 @@ const langOptions: DropdownProps['options'] = [
 ];
 
 const userOptions = computed<DropdownProps['options']>(() => [
+  { content: t('topNav.dropdown_change_password'), value: 'changepwd' },
   { content: t('topNav.dropdown_update'), value: 'update' },
   { content: '版本回退', value: 'rollback' },
   { content: t('topNav.dropdown_reboot_waf'), value: 'reboot', disabled: isResetloading.value },
   { content: t('topNav.dropdown_logout'), value: 'logout' },
 ]);
+
+/** 个人自助修改密码 */
+const showChangePwd = ref(false);
 
 const compiledMarkdown = computed(() => DOMPurify.sanitize(marked.parse(updateDesc.value || '') as string));
 
@@ -249,6 +257,9 @@ function onLangChange(data: { value?: string | number }) {
 
 async function onUserAction(data: { value?: string | number }) {
   switch (data.value) {
+    case 'changepwd':
+      showChangePwd.value = true;
+      break;
     case 'update':
       checkVersion('manual');
       break;
