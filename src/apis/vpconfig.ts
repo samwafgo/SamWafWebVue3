@@ -90,6 +90,42 @@ export function updateNoticeTitleApi(data: Record<string, any>) {
   });
 }
 
+/** 获取管理端仅允许HTTPS开关 */
+export function getSslForceHttpsApi(params: Record<string, any>) {
+  return request({
+    url: 'vipconfig/getSslForceHttps',
+    method: 'get',
+    params,
+  });
+}
+
+/** 更新管理端仅允许HTTPS开关 */
+export function updateSslForceHttpsApi(data: Record<string, any>) {
+  return request({
+    url: 'vipconfig/updateSslForceHttps',
+    method: 'post',
+    data,
+  });
+}
+
+/** 获取管理端证书绑定的证书夹 */
+export function getSslBindCertApi(params: Record<string, any>) {
+  return request({
+    url: 'vipconfig/getSslBindCert',
+    method: 'get',
+    params,
+  });
+}
+
+/** 绑定/解绑管理端证书到证书夹（ssl_config_id 传空表示解绑） */
+export function updateSslBindCertApi(data: Record<string, any>) {
+  return request({
+    url: 'vipconfig/updateSslBindCert',
+    method: 'post',
+    data,
+  });
+}
+
 /** 获取域名白名单 */
 export function getDomainWhitelistApi(params: Record<string, any>) {
   return request({

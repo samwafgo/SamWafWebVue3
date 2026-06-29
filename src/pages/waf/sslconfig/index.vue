@@ -101,6 +101,14 @@
         <t-form-item>
           <b>{{ t('page.ssl.label_auto_tip') }}</b>
         </t-form-item>
+        <t-form-item :label="t('page.ssl.label_auto_load_path_switch')" name="auto_load_path">
+          <div>
+            <t-switch v-model="formEditData.auto_load_path" :custom-value="[1, 0]" />
+            <div style="color: #909399; font-size: 12px; margin-top: 4px; line-height: 1.5; max-width: 480px">
+              {{ t('page.ssl.label_auto_load_path_tip') }}
+            </div>
+          </div>
+        </t-form-item>
         <t-form-item :label="t('page.ssl.label_auto_key_path')" name="key_path">
           <t-textarea v-model="formEditData.key_path" :style="{ width: '480px' }" :autosize="{ minRows: 4, maxRows: 4 }" />
         </t-form-item>
@@ -140,6 +148,7 @@ const INITIAL_DATA = {
   key_content: '',
   cert_path: '',
   key_path: '',
+  auto_load_path: 1,
 };
 
 const { t } = useI18n();
@@ -240,7 +249,7 @@ const onSubmit: FormProps['onSubmit'] = ({ firstError }) => {
 };
 
 function handleClickEdit(slotProps: { row: Record<string, any> }) {
-  formEditData.value = { ...slotProps.row };
+  formEditData.value = { auto_load_path: 1, ...slotProps.row };
   editFormVisible.value = true;
 }
 
