@@ -351,7 +351,7 @@ function getDetail(id: string | number) {
 }
 
 function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/SslExpire.html`);
+  window.open(`${getOnlineUrl()}/guide/SSL.html`);
 }
 </script>
 

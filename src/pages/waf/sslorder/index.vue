@@ -1014,7 +1014,7 @@ function onCancel() {
 }
 
 function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/SSLOrder.html`);
+  window.open(`${getOnlineUrl()}/guide/SSL.html`);
 }
 
 onMounted(() => {

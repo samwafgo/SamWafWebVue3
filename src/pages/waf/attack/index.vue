@@ -1106,7 +1106,7 @@ function handleClickIPDetail(e: { row: Record<string, any> }) {
 
 // Jump Url
 function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/attacklog.html`);
+  window.open(`${getOnlineUrl()}/guide/AttackLog.html`);
 }
 
 /**

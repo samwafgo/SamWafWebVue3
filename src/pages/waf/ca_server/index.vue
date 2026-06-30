@@ -3,7 +3,7 @@
     <t-card class="list-card-container">
       <t-row justify="space-between">
         <div class="left-operation-container">
-          <t-button @click="handleAdd">{{ t('page.ca_server_info.button_add_ca_server_info') }}</t-button>
+          <t-button @click="handleAdd">{{ t('page.ca_server_info.button_add_ca_server') }}</t-button>
         </div>
         <div class="right-operation-container">
           <t-form :data="searchformData" layout="inline" colon :style="{ marginBottom: '8px' }">
@@ -51,7 +51,7 @@
           <t-input v-model="formData.ca_server_address" :style="{ width: '480px' }" />
         </t-form-item>
 
-        <t-form-item :label="t('page.ca_server_info.remarks')" name="remarks">
+        <t-form-item :label="t('page.ca_server_info.ca_server_remarks')" name="remarks">
           <t-input v-model="formData.remarks" :style="{ width: '480px' }" />
         </t-form-item>
 
@@ -72,7 +72,7 @@
           <t-input v-model="formEditData.ca_server_address" :style="{ width: '480px' }" />
         </t-form-item>
 
-        <t-form-item :label="t('page.ca_server_info.remarks')" name="remarks">
+        <t-form-item :label="t('page.ca_server_info.ca_server_remarks')" name="remarks">
           <t-input v-model="formEditData.remarks" :style="{ width: '480px' }" />
         </t-form-item>
 
@@ -133,7 +133,7 @@ const columns = computed<TableProps['columns']>(() => [
   { colKey: 'row-select', type: 'multiple', width: 64, fixed: 'left' },
   { title: t('page.ca_server_info.ca_server_name'), width: 200, ellipsis: true, colKey: 'ca_server_name' },
   { title: t('page.ca_server_info.ca_server_address'), width: 200, ellipsis: true, colKey: 'ca_server_address' },
-  { title: t('page.ca_server_info.remarks'), width: 200, ellipsis: true, colKey: 'remarks' },
+  { title: t('page.ca_server_info.ca_server_remarks'), width: 200, ellipsis: true, colKey: 'remarks' },
   { align: 'left', fixed: 'right', width: 200, colKey: 'op', title: t('common.op') },
 ]);
 
@@ -279,7 +279,7 @@ function getDetail(id: string | number) {
 }
 
 function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/CaServerInfo.html`);
+  window.open(`${getOnlineUrl()}/guide/SSL.html`);
 }
 
 onMounted(() => {

@@ -264,7 +264,7 @@ function getDetail(id: string | number) {
 }
 
 function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/PrivateGroup.html`);
+  window.open(`${getOnlineUrl()}/guide/PrivateInfo.html`);
 }
 
 onMounted(() => {

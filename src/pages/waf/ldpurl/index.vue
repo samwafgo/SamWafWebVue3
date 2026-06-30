@@ -372,7 +372,7 @@ function getDetail(id: string | number) {
 }
 
 function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/ldp.html`);
+  window.open(`${getOnlineUrl()}/guide/Ldp.html`);
 }
 
 function handleBatchDelete() {

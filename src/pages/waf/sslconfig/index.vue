@@ -293,7 +293,7 @@ function onCancel() {
 }
 
 function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/SSLConfig.html`);
+  window.open(`${getOnlineUrl()}/guide/SSL.html`);
 }
 
 // 导入证书文件
