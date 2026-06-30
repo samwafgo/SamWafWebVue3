@@ -451,6 +451,13 @@
             </template>
             <response-compress-config :response-compress-config="responseCompressConfigData" @update="(val: any) => (responseCompressConfigData = val)" />
           </t-tab-panel>
+          <t-tab-panel :value="16">
+            <template #label>
+              <lock-on-icon style="margin-right: 4px; color: #0052d9" />
+              {{ t('page.host.tab_cookie_security') }}
+            </template>
+            <cookie-security-config :cookie-security-config="cookieSecurityConfigData" @update="(val: any) => (cookieSecurityConfigData = val)" />
+          </t-tab-panel>
           <t-tab-panel :value="15">
             <template #label>
               <swap-icon style="margin-right: 4px; color: #0052d9" />
@@ -506,6 +513,7 @@ import CacheConfig from './CacheConfig.vue';
 import CustomHeadersConfig from './CustomHeadersConfig.vue';
 import CustomResponseHeadersConfig from './CustomResponseHeadersConfig.vue';
 import ResponseCompressConfig from './ResponseCompressConfig.vue';
+import CookieSecurityConfig from './CookieSecurityConfig.vue';
 import PathRuleConfig from './PathRuleConfig.vue';
 import SslForm from './SslForm.vue';
 import {
@@ -519,6 +527,7 @@ import {
   INITIAL_CUSTOM_HEADERS,
   INITIAL_CUSTOM_RESPONSE_HEADERS,
   INITIAL_RESPONSE_COMPRESS,
+  INITIAL_COOKIE_SECURITY,
   DEFAULT_STATIC_SECURITY_HEADERS,
 } from '../constants';
 import { sslConfigListApi, sslConfigAddApi, sslConfigEditApi } from '@/apis/sslconfig';
@@ -569,6 +578,7 @@ const transportConfigData = ref<Record<string, any>>({ ...INITIAL_TRANSPORT });
 const customHeadersConfigData = ref<Record<string, any>>({ ...INITIAL_CUSTOM_HEADERS });
 const customResponseHeadersConfigData = ref<Record<string, any>>({ ...INITIAL_CUSTOM_RESPONSE_HEADERS });
 const responseCompressConfigData = ref<Record<string, any>>({ ...INITIAL_RESPONSE_COMPRESS });
+const cookieSecurityConfigData = ref<Record<string, any>>({ ...INITIAL_COOKIE_SECURITY });
 
 const rules: FormProps['rules'] = {
   host: [
@@ -830,6 +840,25 @@ watch(
       }
     } else {
       responseCompressConfigData.value = { ...INITIAL_RESPONSE_COMPRESS };
+    }
+
+    // 解析 Cookie 安全保护配置
+    if (fd.cookie_security_json && fd.cookie_security_json !== '') {
+      try {
+        const cs = JSON.parse(fd.cookie_security_json);
+        cookieSecurityConfigData.value = {
+          is_enable: String(cs.is_enable !== undefined ? cs.is_enable : 0),
+          http_only: String(cs.http_only !== undefined ? cs.http_only : 1),
+          secure: String(cs.secure !== undefined ? cs.secure : 2),
+          same_site: cs.same_site != null ? cs.same_site : 'Lax',
+          exclude_cookies: cs.exclude_cookies != null ? cs.exclude_cookies : '',
+        };
+      } catch (e) {
+        console.error('解析cookie_security_json失败', e);
+        cookieSecurityConfigData.value = { ...INITIAL_COOKIE_SECURITY };
+      }
+    } else {
+      cookieSecurityConfigData.value = { ...INITIAL_COOKIE_SECURITY };
     }
 
     // 解析静态网站配置
@@ -1115,6 +1144,15 @@ const onSubmit: FormProps['onSubmit'] = ({ validateResult, firstError }) => {
       exclude_extensions: responseCompressConfigData.value.exclude_extensions || '',
       exclude_paths: responseCompressConfigData.value.exclude_paths || '',
       compress_when_static_assist: parseInt(responseCompressConfigData.value.compress_when_static_assist, 10) || 0,
+    });
+
+    // 处理 Cookie 安全保护配置
+    postdata.cookie_security_json = JSON.stringify({
+      is_enable: parseInt(cookieSecurityConfigData.value.is_enable, 10) || 0,
+      http_only: parseInt(cookieSecurityConfigData.value.http_only, 10) || 0,
+      secure: parseInt(cookieSecurityConfigData.value.secure, 10) || 0,
+      same_site: cookieSecurityConfigData.value.same_site || '',
+      exclude_cookies: cookieSecurityConfigData.value.exclude_cookies || '',
     });
 
     // 处理静态网站配置
