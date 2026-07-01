@@ -312,6 +312,18 @@
                 {{ t('page.host.config_detail') }} <jump-icon />
               </t-link>
             </t-form-item>
+
+            <t-form-item :label="t('page.host.tab_tamper')">
+              <t-tooltip :content="t('page.host.tamper.intro')" placement="top" :overlay-style="{ width: '320px' }" show-arrow>
+                <t-radio-group v-model="tamperConfigData.is_enable">
+                  <t-radio value="0">{{ t('common.off') }}</t-radio>
+                  <t-radio value="1">{{ t('common.on') }}</t-radio>
+                </t-radio-group>
+              </t-tooltip>
+              <t-link theme="primary" size="small" style="margin-left: 12px" @click="activeTab = 18">
+                {{ t('page.host.config_detail') }} <jump-icon />
+              </t-link>
+            </t-form-item>
           </t-tab-panel>
 
           <t-tab-panel :value="4">
@@ -489,6 +501,13 @@
             </template>
             <csrf-config :csrf-config="csrfConfigData" @update="(val: any) => (csrfConfigData = val)" />
           </t-tab-panel>
+          <t-tab-panel :value="18">
+            <template #label>
+              <verify-icon style="margin-right: 4px; color: #0052d9" />
+              {{ t('page.host.tab_tamper') }}
+            </template>
+            <tamper-config :tamper-config="tamperConfigData" :prop-host-code="formData.code" @update="(val: any) => (tamperConfigData = val)" />
+          </t-tab-panel>
           <t-tab-panel :value="15">
             <template #label>
               <swap-icon style="margin-right: 4px; color: #0052d9" />
@@ -531,6 +550,7 @@ import {
   FilePasteIcon,
   SwapIcon,
   SecuredIcon,
+  VerifyIcon,
   HelpCircleIcon,
   JumpIcon,
 } from 'tdesign-icons-vue-next';
@@ -547,6 +567,7 @@ import CustomResponseHeadersConfig from './CustomResponseHeadersConfig.vue';
 import ResponseCompressConfig from './ResponseCompressConfig.vue';
 import CookieSecurityConfig from './CookieSecurityConfig.vue';
 import CsrfConfig from './CsrfConfig.vue';
+import TamperConfig from './TamperConfig.vue';
 import PathRuleConfig from './PathRuleConfig.vue';
 import SslForm from './SslForm.vue';
 import {
@@ -562,6 +583,7 @@ import {
   INITIAL_RESPONSE_COMPRESS,
   INITIAL_COOKIE_SECURITY,
   INITIAL_CSRF,
+  INITIAL_TAMPER,
   DEFAULT_STATIC_SECURITY_HEADERS,
 } from '../constants';
 import { sslConfigListApi, sslConfigAddApi, sslConfigEditApi } from '@/apis/sslconfig';
@@ -614,6 +636,7 @@ const customResponseHeadersConfigData = ref<Record<string, any>>({ ...INITIAL_CU
 const responseCompressConfigData = ref<Record<string, any>>({ ...INITIAL_RESPONSE_COMPRESS });
 const cookieSecurityConfigData = ref<Record<string, any>>({ ...INITIAL_COOKIE_SECURITY });
 const csrfConfigData = ref<Record<string, any>>({ ...INITIAL_CSRF, protect_methods: [...INITIAL_CSRF.protect_methods] });
+const tamperConfigData = ref<Record<string, any>>({ ...INITIAL_TAMPER });
 const activeTab = ref<number>(1); // 当前激活的配置 Tab（受控，供防御总览开关「配置详情」跳转）
 
 const rules: FormProps['rules'] = {
@@ -922,6 +945,23 @@ watch(
       csrfConfigData.value = { ...INITIAL_CSRF, protect_methods: [...INITIAL_CSRF.protect_methods] };
     }
 
+    // 解析网页防篡改配置
+    if (fd.tamper_json && fd.tamper_json !== '') {
+      try {
+        const tp = JSON.parse(fd.tamper_json);
+        tamperConfigData.value = {
+          is_enable: String(tp.is_enable !== undefined ? tp.is_enable : 0),
+          action: tp.action || 'replace',
+          max_size_kb: tp.max_size_kb !== undefined ? tp.max_size_kb : 1024,
+        };
+      } catch (e) {
+        console.error('解析tamper_json失败', e);
+        tamperConfigData.value = { ...INITIAL_TAMPER };
+      }
+    } else {
+      tamperConfigData.value = { ...INITIAL_TAMPER };
+    }
+
     // 解析静态网站配置
     if (fd.static_site_json && fd.static_site_json !== '') {
       try {
@@ -1225,6 +1265,13 @@ const onSubmit: FormProps['onSubmit'] = ({ validateResult, firstError }) => {
       allowed_origins: csrfConfigData.value.allowed_origins || '',
       allow_empty_ref: parseInt(csrfConfigData.value.allow_empty_ref, 10) || 0,
       exclude_paths: csrfConfigData.value.exclude_paths || '',
+    });
+
+    // 处理网页防篡改配置
+    postdata.tamper_json = JSON.stringify({
+      is_enable: parseInt(tamperConfigData.value.is_enable, 10) || 0,
+      action: tamperConfigData.value.action || 'replace',
+      max_size_kb: parseInt(tamperConfigData.value.max_size_kb, 10) || 1024,
     });
 
     // 处理静态网站配置
