@@ -506,7 +506,7 @@
               <verify-icon style="margin-right: 4px; color: #0052d9" />
               {{ t('page.host.tab_tamper') }}
             </template>
-            <tamper-config :tamper-config="tamperConfigData" :prop-host-code="formData.code" @update="(val: any) => (tamperConfigData = val)" />
+            <tamper-config :tamper-config="tamperConfigData" :prop-host-code="formData.code" :prop-host="formData.host" :prop-bind-more-host="formData.bind_more_host" @update="(val: any) => (tamperConfigData = val)" />
           </t-tab-panel>
           <t-tab-panel :value="15">
             <template #label>

@@ -31,9 +31,16 @@
     <template v-if="propHostCode">
       <div style="margin-bottom: 8px">
         <t-button size="small" @click="handleAdd">{{ t('page.host.tamper.add_url') }}</t-button>
+        <t-button size="small" theme="primary" variant="outline" style="margin-left: 8px" @click="openExtract">{{ t('page.host.tamper.extract_urls') }}</t-button>
+        <t-button size="small" variant="outline" style="margin-left: 8px" :disabled="selectedRowKeys.length === 0" @click="handleRelearnBatch">{{ t('page.host.tamper.relearn_selected') }}</t-button>
+        <t-button size="small" variant="outline" style="margin-left: 8px" @click="handleRelearnAll">{{ t('page.host.tamper.relearn_all') }}</t-button>
+        <t-button size="small" theme="danger" variant="outline" style="margin-left: 8px" :disabled="selectedRowKeys.length === 0" @click="handleDelBatch">{{ t('page.host.tamper.del_selected') }}</t-button>
         <t-button size="small" variant="outline" style="margin-left: 8px" @click="getList">{{ t('common.refresh') }}</t-button>
       </div>
-      <t-table :columns="columns" :data="data" row-key="id" :loading="dataLoading" size="small" :pagination="pagination" @page-change="onPageChange">
+      <t-table :columns="columns" :data="data" row-key="id" :loading="dataLoading" size="small" :pagination="pagination"
+               :max-height="360" :sort="sort" :filter-value="filterValue"
+               :selected-row-keys="selectedRowKeys" @select-change="onSelectChange"
+               @sort-change="onSortChange" @filter-change="onFilterChange" @page-change="onPageChange">
         <template #is_enable="{ row }">
           <t-tag :theme="row.is_enable === 1 ? 'success' : 'default'" variant="light">
             {{ row.is_enable === 1 ? t('common.on') : t('common.off') }}
@@ -121,13 +128,43 @@
         <t-alert v-else theme="info" :message="t('page.host.tamper.binary_hint')" />
       </div>
     </t-dialog>
+
+    <!-- 从页面提取URL弹窗 -->
+    <t-dialog v-model:visible="extractVisible" :header="t('page.host.tamper.extract_title')" :width="720" :footer="false">
+      <div>
+        <t-alert theme="info" :message="t('page.host.tamper.extract_hint')" style="margin-bottom: 12px" />
+        <div style="display: flex; gap: 8px; margin-bottom: 12px">
+          <t-select v-model="extractDomain" :style="{ width: '220px' }" :placeholder="t('page.host.tamper.extract_domain')">
+            <t-option v-for="d in domainOptions" :key="d" :value="d" :label="d" />
+          </t-select>
+          <t-input v-model="extractPageUrl" :placeholder="t('page.host.tamper.extract_placeholder')" style="flex: 1" @enter="doExtract" />
+          <t-button theme="primary" :loading="extractLoading" @click="doExtract">{{ t('page.host.tamper.extract_btn') }}</t-button>
+        </div>
+        <template v-if="extractResult.length > 0">
+          <div style="margin-bottom: 8px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+            <span>{{ t('page.host.tamper.extract_found', { n: extractResult.length }) }}</span>
+            <t-checkbox v-model="extractIgnoreQuery">{{ t('page.host.tamper.ignore_query') }}</t-checkbox>
+            <t-button size="small" theme="primary" :disabled="extractSelected.length === 0" @click="doAddBatch">
+              {{ t('page.host.tamper.add_selected', { n: extractSelected.length }) }}
+            </t-button>
+          </div>
+          <t-table :columns="extractColumns" :data="extractResult" row-key="url" size="small" max-height="360"
+                   :selected-row-keys="extractSelected" @select-change="onExtractSelectChange">
+            <template #type="{ row }">
+              <t-tag size="small" variant="light" :theme="typeTheme(row.type)">{{ row.type }}</t-tag>
+            </template>
+          </t-table>
+        </template>
+        <t-alert v-else-if="extractDone" theme="warning" :message="t('page.host.tamper.extract_empty')" />
+      </div>
+    </t-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { MessagePlugin, type FormProps, type PageInfo, type TableProps } from 'tdesign-vue-next';
+import { DialogPlugin, MessagePlugin, type FormProps, type PageInfo, type TableProps } from 'tdesign-vue-next';
 import {
   wafTamperRuleListApi,
   wafTamperRuleAddApi,
@@ -136,6 +173,10 @@ import {
   wafTamperRuleDetailApi,
   wafTamperRuleRelearnApi,
   wafTamperRuleBaselineApi,
+  wafTamperRuleRelearnBatchApi,
+  wafTamperRuleExtractApi,
+  wafTamperRuleAddBatchApi,
+  wafTamperRuleDelBatchApi,
 } from '@/apis/tamper_rule';
 
 const INITIAL_RULE = {
@@ -148,7 +189,7 @@ const INITIAL_RULE = {
   remarks: '',
 };
 
-const props = defineProps<{ tamperConfig: Record<string, any>; propHostCode?: string }>();
+const props = defineProps<{ tamperConfig: Record<string, any>; propHostCode?: string; propHost?: string; propBindMoreHost?: string }>();
 const emit = defineEmits<{ (e: 'update', config: Record<string, any>): void }>();
 
 const { t } = useI18n();
@@ -158,6 +199,8 @@ const local = ref<Record<string, any>>(JSON.parse(JSON.stringify(props.tamperCon
 const data = ref<Record<string, any>[]>([]);
 const dataLoading = ref(false);
 const pagination = reactive({ total: 0, current: 1, pageSize: 10 });
+const sort = ref<any>(undefined);
+const filterValue = ref<Record<string, any>>({});
 const formVisible = ref(false);
 const editMode = ref(false);
 const formData = ref<Record<string, any>>({ ...INITIAL_RULE });
@@ -167,20 +210,57 @@ const baselineVisible = ref(false);
 const baselineData = ref<Record<string, any> | null>(null);
 const baselineExpanded = ref(false);
 
+// 提取URL弹窗
+const selectedRowKeys = ref<(string | number)[]>([]);
+const extractVisible = ref(false);
+const extractDomain = ref('');
+const extractPageUrl = ref('/');
+const extractLoading = ref(false);
+const extractDone = ref(false);
+const extractResult = ref<Record<string, any>[]>([]);
+const extractSelected = ref<(string | number)[]>([]);
+const extractIgnoreQuery = ref(true);
+
 const rules: FormProps['rules'] = {
   url: [{ required: true, message: t('page.host.tamper.url_placeholder'), type: 'error' }],
 };
 
+const extractColumns = computed<TableProps['columns']>(() => [
+  { colKey: 'row-select', type: 'multiple', width: 40 },
+  { title: t('page.host.tamper.url'), colKey: 'url', ellipsis: true },
+  { title: t('page.host.tamper.col_type'), colKey: 'type', width: 90 },
+]);
+
 const columns = computed<TableProps['columns']>(() => [
-  { title: t('page.host.tamper.url'), colKey: 'url', width: 200, ellipsis: true },
-  { title: t('page.host.tamper.rule_name'), colKey: 'rule_name', width: 130, ellipsis: true },
-  { title: t('page.host.tamper.rule_enable'), colKey: 'is_enable', width: 80 },
-  { title: t('page.host.tamper.ignore_query'), colKey: 'ignore_query', width: 90 },
-  { title: t('page.host.tamper.baseline_status'), colKey: 'baseline_status', width: 100 },
-  { title: t('page.host.tamper.col_size'), colKey: 'content_size', width: 90 },
-  { title: t('page.host.tamper.tamper_count'), colKey: 'tamper_count', width: 80 },
+  { colKey: 'row-select', type: 'multiple', width: 40 },
+  { title: t('page.host.tamper.url'), colKey: 'url', width: 200, ellipsis: true, sorter: true, filter: { type: 'input' } },
+  { title: t('page.host.tamper.rule_name'), colKey: 'rule_name', width: 130, ellipsis: true, sorter: true, filter: { type: 'input' } },
+  {
+    title: t('page.host.tamper.rule_enable'), colKey: 'is_enable', width: 90, sorter: true,
+    filter: { type: 'single', list: [{ label: t('common.on'), value: 1 }, { label: t('common.off'), value: 0 }] },
+  },
+  {
+    title: t('page.host.tamper.ignore_query'), colKey: 'ignore_query', width: 100, sorter: true,
+    filter: { type: 'single', list: [{ label: t('common.yes'), value: 1 }, { label: t('common.no'), value: 0 }] },
+  },
+  {
+    title: t('page.host.tamper.baseline_status'), colKey: 'baseline_status', width: 110, sorter: true,
+    filter: { type: 'single', list: [{ label: t('page.host.tamper.status_unlearned'), value: 0 }, { label: t('page.host.tamper.status_learned'), value: 1 }, { label: t('page.host.tamper.status_failed'), value: 2 }] },
+  },
+  { title: t('page.host.tamper.col_size'), colKey: 'content_size', width: 90, sorter: true },
+  { title: t('page.host.tamper.tamper_count'), colKey: 'tamper_count', width: 90, sorter: true },
   { align: 'left', fixed: 'right', width: 220, colKey: 'op', title: t('common.op') },
 ]);
+
+const domainOptions = computed<string[]>(() => {
+  const list: string[] = [];
+  if (props.propHost) list.push(props.propHost.trim());
+  (props.propBindMoreHost || '').split('\n').forEach((line) => {
+    const d = line.trim();
+    if (d && !list.includes(d)) list.push(d);
+  });
+  return list;
+});
 
 const displayBaselineText = computed(() => {
   const c = (baselineData.value && baselineData.value.content) || '';
@@ -240,10 +320,38 @@ function formatSize(n: number) {
   if (v < 1024 * 1024) return `${(v / 1024).toFixed(1)} KB`;
   return `${(v / 1024 / 1024).toFixed(2)} MB`;
 }
+function buildListParams() {
+  const params: Record<string, any> = {
+    pageSize: pagination.pageSize,
+    pageIndex: pagination.current,
+    host_code: props.propHostCode,
+  };
+  if (sort.value && sort.value.sortBy) {
+    params.order_key = sort.value.sortBy;
+    params.order_dir = sort.value.descending ? 'desc' : 'asc';
+  }
+  const f = filterValue.value || {};
+  if (f.url) params.url = f.url;
+  if (f.rule_name) params.rule_name = f.rule_name;
+  if (typeof f.is_enable === 'number') params.is_enable = f.is_enable;
+  if (typeof f.ignore_query === 'number') params.ignore_query = f.ignore_query;
+  if (typeof f.baseline_status === 'number') params.baseline_status = f.baseline_status;
+  return params;
+}
+function onSortChange(s: any) {
+  sort.value = s;
+  pagination.current = 1;
+  getList();
+}
+function onFilterChange(filters: Record<string, any>) {
+  filterValue.value = filters || {};
+  pagination.current = 1;
+  getList();
+}
 function getList() {
   if (!props.propHostCode) return;
   dataLoading.value = true;
-  wafTamperRuleListApi({ pageSize: pagination.pageSize, pageIndex: pagination.current, host_code: props.propHostCode })
+  wafTamperRuleListApi(buildListParams())
     .then((res) => {
       if (res.code === 0) {
         data.value = res.data.list ?? [];
@@ -315,6 +423,117 @@ function handleRelearn(e: { row: Record<string, any> }) {
       MessagePlugin.warning(res.msg);
     }
   });
+}
+function onSelectChange(value: (string | number)[]) {
+  selectedRowKeys.value = value;
+}
+function handleRelearnBatch() {
+  if (selectedRowKeys.value.length === 0) return;
+  wafTamperRuleRelearnBatchApi({ host_code: props.propHostCode, ids: selectedRowKeys.value }).then((res) => {
+    if (res.code === 0) {
+      MessagePlugin.success(res.msg);
+      selectedRowKeys.value = [];
+      getList();
+    } else {
+      MessagePlugin.warning(res.msg);
+    }
+  });
+}
+function handleRelearnAll() {
+  const confirmDia = DialogPlugin.confirm({
+    header: t('page.host.tamper.relearn_all'),
+    body: t('page.host.tamper.relearn_all_confirm'),
+    onConfirm: () => {
+      wafTamperRuleRelearnBatchApi({ host_code: props.propHostCode, ids: [] }).then((res) => {
+        if (res.code === 0) {
+          MessagePlugin.success(res.msg);
+          selectedRowKeys.value = [];
+          getList();
+        } else {
+          MessagePlugin.warning(res.msg);
+        }
+      });
+      confirmDia.hide();
+    },
+    onClose: () => confirmDia.hide(),
+  });
+}
+function handleDelBatch() {
+  if (selectedRowKeys.value.length === 0) return;
+  const confirmDia = DialogPlugin.confirm({
+    header: t('page.host.tamper.del_selected'),
+    body: t('common.data_delete_warning'),
+    theme: 'warning',
+    onConfirm: () => {
+      wafTamperRuleDelBatchApi({ host_code: props.propHostCode, ids: selectedRowKeys.value }).then((res) => {
+        if (res.code === 0) {
+          MessagePlugin.success(res.msg);
+          selectedRowKeys.value = [];
+          getList();
+        } else {
+          MessagePlugin.warning(res.msg);
+        }
+      });
+      confirmDia.hide();
+    },
+    onClose: () => confirmDia.hide(),
+  });
+}
+function openExtract() {
+  extractDomain.value = domainOptions.value[0] || '';
+  extractPageUrl.value = '/';
+  extractResult.value = [];
+  extractSelected.value = [];
+  extractDone.value = false;
+  extractIgnoreQuery.value = true;
+  extractVisible.value = true;
+}
+function doExtract() {
+  extractLoading.value = true;
+  extractDone.value = false;
+  wafTamperRuleExtractApi({ host_code: props.propHostCode, domain: extractDomain.value, page_url: extractPageUrl.value })
+    .then((res) => {
+      if (res.code === 0) {
+        extractResult.value = res.data.list ?? [];
+        extractSelected.value = extractResult.value.map((r) => r.url);
+      } else {
+        extractResult.value = [];
+        extractSelected.value = [];
+        MessagePlugin.warning(res.msg);
+      }
+      extractDone.value = true;
+    })
+    .catch((e: Error) => {
+      console.log(e);
+      extractDone.value = true;
+    })
+    .finally(() => {
+      extractLoading.value = false;
+    });
+}
+function onExtractSelectChange(value: (string | number)[]) {
+  extractSelected.value = value;
+}
+function doAddBatch() {
+  if (extractSelected.value.length === 0) return;
+  wafTamperRuleAddBatchApi({
+    host_code: props.propHostCode,
+    urls: extractSelected.value,
+    is_enable: 1,
+    ignore_query: extractIgnoreQuery.value ? 1 : 0,
+  }).then((res) => {
+    if (res.code === 0) {
+      MessagePlugin.success(res.msg);
+      extractVisible.value = false;
+      getList();
+    } else {
+      MessagePlugin.warning(res.msg);
+    }
+  });
+}
+function typeTheme(type: string) {
+  const map: Record<string, string> = { js: 'primary', css: 'success', html: 'warning', img: 'default' };
+  return (map[type] || 'default') as 'primary' | 'success' | 'warning' | 'default';
 }
 function handleDelete(row: { rowIndex: number }) {
   deleteIdx.value = row.rowIndex;
