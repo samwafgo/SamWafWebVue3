@@ -202,6 +202,20 @@
               <t-radio value="starttls">{{ t('page.notify_channel.email_ssl_starttls') }}</t-radio>
             </t-radio-group>
           </t-form-item>
+          <t-form-item
+            v-if="formData.email_ssl_mode !== 'none'"
+            :label="t('page.notify_channel.email_skip_verify')"
+            name="email_skip_verify"
+          >
+            <div :style="{ width: '480px' }">
+              <t-checkbox v-model="formData.email_skip_verify" class="skip-verify-checkbox">
+                {{ t('page.notify_channel.email_skip_verify_label') }}
+              </t-checkbox>
+              <div style="font-size: 12px; color: #666; margin-top: 4px; line-height: 1.5">
+                ⚠️ {{ t('page.notify_channel.email_skip_verify_tip') }}
+              </div>
+            </div>
+          </t-form-item>
         </template>
         <t-form-item :label="t('page.notify_channel.label_status')" name="status">
           <t-radio-group v-model="formData.status">
@@ -326,6 +340,20 @@
               <t-radio value="starttls">{{ t('page.notify_channel.email_ssl_starttls') }}</t-radio>
             </t-radio-group>
           </t-form-item>
+          <t-form-item
+            v-if="formEditData.email_ssl_mode !== 'none'"
+            :label="t('page.notify_channel.email_skip_verify')"
+            name="email_skip_verify"
+          >
+            <div :style="{ width: '480px' }">
+              <t-checkbox v-model="formEditData.email_skip_verify" class="skip-verify-checkbox">
+                {{ t('page.notify_channel.email_skip_verify_label') }}
+              </t-checkbox>
+              <div style="font-size: 12px; color: #666; margin-top: 4px; line-height: 1.5">
+                ⚠️ {{ t('page.notify_channel.email_skip_verify_tip') }}
+              </div>
+            </div>
+          </t-form-item>
         </template>
         <t-form-item :label="t('page.notify_channel.label_status')" name="status">
           <t-radio-group v-model="formEditData.status">
@@ -438,6 +466,7 @@ const INITIAL_DATA = {
   email_from_name: '',
   email_to: '',
   email_ssl_mode: 'none',
+  email_skip_verify: false,
 };
 
 const data = ref<Record<string, any>[]>([]);
@@ -529,6 +558,7 @@ function handleClickEdit(e: { row: Record<string, any> }) {
       row.email_to = (config.to_emails || []).join(',');
       // eslint-disable-next-line no-nested-ternary
       row.email_ssl_mode = config.enable_ssl ? 'ssl' : config.enable_starttls ? 'starttls' : 'none';
+      row.email_skip_verify = config.skip_verify || false;
     } catch (err) {
       console.error('解析邮件配置失败', err);
     }
@@ -585,6 +615,7 @@ function normalizeSubmitData(source: Record<string, any>) {
       to_emails: (submitData.email_to || '').split(',').map((email: string) => email.trim()),
       enable_ssl: submitData.email_ssl_mode === 'ssl',
       enable_starttls: submitData.email_ssl_mode === 'starttls',
+      skip_verify: submitData.email_ssl_mode !== 'none' && !!submitData.email_skip_verify,
     };
     submitData.config_json = JSON.stringify(emailConfig);
     submitData.webhook_url = '';
@@ -680,6 +711,7 @@ function resetTypeFields(target: Record<string, any>, value: string) {
     target.email_from_name = '';
     target.email_to = '';
     target.email_ssl_mode = 'none';
+    target.email_skip_verify = false;
   } else {
     target.access_token = '';
     target.email_smtp_host = '';
@@ -690,6 +722,7 @@ function resetTypeFields(target: Record<string, any>, value: string) {
     target.email_from_name = '';
     target.email_to = '';
     target.email_ssl_mode = 'none';
+    target.email_skip_verify = false;
   }
 }
 
@@ -717,5 +750,19 @@ function handleEditTypeChange(value: any) {
 
 .left-operation-container .t-button {
   margin-right: 8px;
+}
+
+/* 防止复选框方块在标签换行时被压扁 */
+.skip-verify-checkbox {
+  align-items: flex-start;
+}
+
+.skip-verify-checkbox :deep(.t-checkbox__input) {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.skip-verify-checkbox :deep(.t-checkbox__label) {
+  line-height: 1.4;
 }
 </style>
