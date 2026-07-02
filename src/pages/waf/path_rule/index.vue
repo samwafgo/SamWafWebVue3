@@ -95,6 +95,14 @@
 
         <!-- target_type=1: 后端代理 -->
         <template v-if="formData.target_type === '1'">
+          <t-form-item :label="t('page.path_rule.remote_scheme')" name="remote_scheme">
+            <div>
+              <t-select v-model="formData.remote_scheme" :style="{ width: '200px' }">
+                <t-option v-for="item in schemeOptions" :key="item.value" :value="item.value" :label="item.label" />
+              </t-select>
+              <div class="form-item-tips">{{ t('page.path_rule.remote_scheme_tips') }}</div>
+            </div>
+          </t-form-item>
           <t-form-item :label="t('page.path_rule.remote_host')" name="remote_host">
             <t-input v-model="formData.remote_host" :style="{ width: '480px' }" :placeholder="t('page.path_rule.remote_host_placeholder')" />
           </t-form-item>
@@ -106,6 +114,30 @@
               <t-input v-model="formData.remote_ip" :style="{ width: '480px' }" :placeholder="t('page.path_rule.remote_ip_placeholder')" />
               <div class="form-item-tips">{{ t('page.path_rule.remote_ip_tips') }}</div>
             </div>
+          </t-form-item>
+          <t-form-item :label="t('page.path_rule.response_time_out')" name="response_time_out">
+            <div>
+              <t-input-number v-model="formData.response_time_out" :style="{ width: '150px' }" :min="0" />
+              <div class="form-item-tips">{{ t('page.path_rule.response_time_out_tips') }}</div>
+            </div>
+          </t-form-item>
+          <t-form-item :label="t('page.path_rule.record_access_log')" name="record_access_log">
+            <div>
+              <t-radio-group v-model="formData.record_access_log">
+                <t-radio value="0">{{ t('common.off') }}</t-radio>
+                <t-radio value="1">{{ t('common.on') }}</t-radio>
+              </t-radio-group>
+              <div class="form-item-tips">{{ t('page.path_rule.record_access_log_tips') }}</div>
+            </div>
+          </t-form-item>
+          <t-form-item :label="t('page.path_rule.preview')">
+            <t-alert theme="info">
+              <template #message>
+                <div>{{ t('page.path_rule.preview_client') }}：{{ addPreview.clientUrl }}</div>
+                <div>{{ t('page.path_rule.preview_backend') }}：{{ addPreview.backendUrl }}{{ addPreview.stripNote }}</div>
+                <div v-if="addPreview.ipLine">{{ addPreview.ipLine }}</div>
+              </template>
+            </t-alert>
           </t-form-item>
         </template>
 
@@ -206,6 +238,14 @@
         </t-form-item>
 
         <template v-if="formEditData.target_type === '1'">
+          <t-form-item :label="t('page.path_rule.remote_scheme')" name="remote_scheme">
+            <div>
+              <t-select v-model="formEditData.remote_scheme" :style="{ width: '200px' }">
+                <t-option v-for="item in schemeOptions" :key="item.value" :value="item.value" :label="item.label" />
+              </t-select>
+              <div class="form-item-tips">{{ t('page.path_rule.remote_scheme_tips') }}</div>
+            </div>
+          </t-form-item>
           <t-form-item :label="t('page.path_rule.remote_host')" name="remote_host">
             <t-input v-model="formEditData.remote_host" :style="{ width: '480px' }" :placeholder="t('page.path_rule.remote_host_placeholder')" />
           </t-form-item>
@@ -217,6 +257,30 @@
               <t-input v-model="formEditData.remote_ip" :style="{ width: '480px' }" :placeholder="t('page.path_rule.remote_ip_placeholder')" />
               <div class="form-item-tips">{{ t('page.path_rule.remote_ip_tips') }}</div>
             </div>
+          </t-form-item>
+          <t-form-item :label="t('page.path_rule.response_time_out')" name="response_time_out">
+            <div>
+              <t-input-number v-model="formEditData.response_time_out" :style="{ width: '150px' }" :min="0" />
+              <div class="form-item-tips">{{ t('page.path_rule.response_time_out_tips') }}</div>
+            </div>
+          </t-form-item>
+          <t-form-item :label="t('page.path_rule.record_access_log')" name="record_access_log">
+            <div>
+              <t-radio-group v-model="formEditData.record_access_log">
+                <t-radio value="0">{{ t('common.off') }}</t-radio>
+                <t-radio value="1">{{ t('common.on') }}</t-radio>
+              </t-radio-group>
+              <div class="form-item-tips">{{ t('page.path_rule.record_access_log_tips') }}</div>
+            </div>
+          </t-form-item>
+          <t-form-item :label="t('page.path_rule.preview')">
+            <t-alert theme="info">
+              <template #message>
+                <div>{{ t('page.path_rule.preview_client') }}：{{ editPreview.clientUrl }}</div>
+                <div>{{ t('page.path_rule.preview_backend') }}：{{ editPreview.backendUrl }}{{ editPreview.stripNote }}</div>
+                <div v-if="editPreview.ipLine">{{ editPreview.ipLine }}</div>
+              </template>
+            </t-alert>
           </t-form-item>
         </template>
 
@@ -296,6 +360,9 @@ const INITIAL_DATA = {
   remote_host: '',
   remote_port: '80',
   remote_ip: '',
+  remote_scheme: 'auto',
+  record_access_log: '0',
+  response_time_out: '0',
   static_root: '',
   spa_fallback: '0',
   redirect_url: '',
@@ -349,6 +416,38 @@ const targetTypeOptions = computed(() => [
   { label: t('page.path_rule.target_type_static'), value: '2' },
   { label: t('page.path_rule.target_type_redirect'), value: '3' },
 ]);
+
+const schemeOptions = computed(() => [
+  { label: t('page.path_rule.scheme_auto'), value: 'auto' },
+  { label: 'HTTP', value: 'http' },
+  { label: 'HTTPS', value: 'https' },
+]);
+
+// 实时预览：根据表单拼出「客户端请求」与「实际转发到」两行示例，纯前端展示转发效果
+function buildPreview(form: Record<string, any>) {
+  const domain = host_dic.value[form.host_code] || t('page.path_rule.preview_your_domain');
+  const p = form.path || '/';
+  const sampleUrl = p.endsWith('/') ? `${p}foo` : `${p}/foo`;
+  const clientUrl = `http(s)://${domain}${sampleUrl}`;
+  let schemeText: string;
+  if (form.remote_scheme === 'http') schemeText = 'http';
+  else if (form.remote_scheme === 'https') schemeText = 'https';
+  else schemeText = t('page.path_rule.preview_follow_client');
+  let backendPath = sampleUrl;
+  if (String(form.strip_prefix) === '1' && sampleUrl.startsWith(p)) {
+    backendPath = sampleUrl.slice(p.length);
+    if (!backendPath.startsWith('/')) backendPath = `/${backendPath}`;
+  }
+  const host = form.remote_host || 'backend';
+  const port = form.remote_port ? `:${form.remote_port}` : '';
+  const backendUrl = `${schemeText}://${host}${port}${backendPath}`;
+  const stripNote = String(form.strip_prefix) === '1' ? `　（${t('page.path_rule.preview_stripped')}${p}）` : '';
+  const ipLine = form.remote_ip ? `${t('page.path_rule.preview_ip')}${form.remote_ip}${port}` : '';
+  return { clientUrl, backendUrl, stripNote, ipLine };
+}
+
+const addPreview = computed(() => buildPreview(formData.value));
+const editPreview = computed(() => buildPreview(formEditData.value));
 
 watch(
   () => props.propHostCode,
@@ -453,6 +552,8 @@ function buildPostData(src: Record<string, any>) {
   d.spa_fallback = Number(d.spa_fallback);
   d.remote_port = Number(d.remote_port);
   d.redirect_code = Number(d.redirect_code);
+  d.record_access_log = Number(d.record_access_log);
+  d.response_time_out = Number(d.response_time_out);
   return d;
 }
 
@@ -519,9 +620,11 @@ function getDetail(id: string | number) {
       if (res.code === 0) {
         const d = res.data;
         // 数字字段转字符串以匹配表单 select/radio 取值
-        ['match_type', 'priority', 'target_type', 'strip_prefix', 'spa_fallback', 'remote_port', 'redirect_code'].forEach((k) => {
+        ['match_type', 'priority', 'target_type', 'strip_prefix', 'spa_fallback', 'remote_port', 'redirect_code', 'record_access_log', 'response_time_out'].forEach((k) => {
           if (d[k] !== undefined && d[k] !== null) d[k] = d[k].toString();
         });
+        // 存量规则 remote_scheme 为空串，归一为 auto（跟随客户端）
+        if (!d.remote_scheme) d.remote_scheme = 'auto';
         formEditData.value = { ...INITIAL_DATA, ...d };
       }
     })
