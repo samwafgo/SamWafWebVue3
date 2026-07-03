@@ -17,3 +17,12 @@ export function sql_query_table_info_api(params: Record<string, any>) {
     params,
   });
 }
+
+/** 获取可查询表及其可见列（不含敏感表/敏感列），供结构化查询向导下拉使用 */
+export function sql_query_queryable_api(params: Record<string, any>) {
+  return request({
+    url: 'sql_query/queryable',
+    method: 'get',
+    params,
+  });
+}
