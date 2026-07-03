@@ -18,6 +18,24 @@ export function getIpWhitelistApi(params: Record<string, any>) {
   });
 }
 
+/** 获取管理端可信代理网段 */
+export function getManageTrustedProxiesApi(params: Record<string, any>) {
+  return request({
+    url: 'vipconfig/getManageTrustedProxies',
+    method: 'get',
+    params,
+  });
+}
+
+/** 更新管理端可信代理网段 */
+export function updateManageTrustedProxiesApi(data: Record<string, any>) {
+  return request({
+    url: 'vipconfig/updateManageTrustedProxies',
+    method: 'post',
+    data,
+  });
+}
+
 /** 更新SSL启用状态 */
 export function updateSslEnableApi(data: Record<string, any>) {
   return request({

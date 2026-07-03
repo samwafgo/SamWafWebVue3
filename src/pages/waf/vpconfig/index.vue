@@ -34,6 +34,41 @@
       </t-loading>
     </t-card>
 
+    <!-- 管理端可信代理网段卡片 -->
+    <t-card class="list-card-container">
+      <template #header>
+        <t-row justify="space-between">
+          <div class="card-header-title">
+            <t-space>
+              <div>{{ t('page.vpconfig.trusted_proxies_title') }}</div>
+              <t-tooltip :content="t('page.vpconfig.trusted_proxies_description')">
+                <help-circle-icon />
+              </t-tooltip>
+            </t-space>
+          </div>
+          <t-space>
+            <t-button theme="primary" @click="fetchTrustedProxies">{{ t('common.refresh') }}</t-button>
+            <t-button theme="primary" @click="handleTrustedProxiesSave">{{ t('common.save') }}</t-button>
+          </t-space>
+        </t-row>
+      </template>
+
+      <t-loading :loading="trustedProxiesLoading">
+        <t-form :data="trustedProxiesFormData" :label-width="180">
+          <t-form-item :label="t('page.vpconfig.trusted_proxies')">
+            <div style="width: 100%">
+              <t-textarea
+                v-model="trustedProxiesFormData.trusted_proxies"
+                :placeholder="t('page.vpconfig.trusted_proxies_placeholder')"
+                :autosize="{ minRows: 3, maxRows: 8 }"
+              />
+              <div class="form-item-tips">{{ t('page.vpconfig.trusted_proxies_tips') }}</div>
+            </div>
+          </t-form-item>
+        </t-form>
+      </t-loading>
+    </t-card>
+
     <!-- 域名白名单卡片 -->
     <t-card class="list-card-container">
       <template #header>
@@ -365,12 +400,14 @@ import { HelpCircleIcon } from 'tdesign-icons-vue-next';
 import {
   getDomainWhitelistApi,
   getIpWhitelistApi,
+  getManageTrustedProxiesApi,
   getNoticeTitleApi,
   getSecurityEntryApi,
   getSslStatusApi,
   restartManagerApi,
   updateDomainWhitelistApi,
   updateIpWhitelistApi,
+  updateManageTrustedProxiesApi,
   updateNoticeTitleApi,
   updateSecurityEntryApi,
   updateSslEnableApi,
@@ -417,6 +454,11 @@ const savedSecurityEntry = reactive({
 const formData = reactive({
   ip_whitelist: '',
 });
+// 管理端可信代理网段（配置存 config.yml，被白名单挡住时可改文件+重启自救）
+const trustedProxiesFormData = reactive({
+  trusted_proxies: '',
+});
+const trustedProxiesLoading = ref(false);
 const sslFormData = reactive({
   ssl_enable: false,
   has_cert: false,
@@ -465,6 +507,7 @@ const securityEntryFullUrl = computed(() => {
 
 onMounted(() => {
   fetchData();
+  fetchTrustedProxies();
   fetchDomainWhitelist();
   fetchSslStatus();
   fetchSslForceHttps();
@@ -489,6 +532,44 @@ function fetchData() {
     })
     .finally(() => {
       dataLoading.value = false;
+    });
+}
+
+function fetchTrustedProxies() {
+  trustedProxiesLoading.value = true;
+  getManageTrustedProxiesApi({})
+    .then((res) => {
+      if (res.code === 0) {
+        trustedProxiesFormData.trusted_proxies = res.data.trusted_proxies || '';
+      } else {
+        MessagePlugin.error(res.msg || t('common.tips.api_error'));
+      }
+    })
+    .catch(() => {
+      MessagePlugin.error(t('common.tips.api_error'));
+    })
+    .finally(() => {
+      trustedProxiesLoading.value = false;
+    });
+}
+
+function handleTrustedProxiesSave() {
+  trustedProxiesLoading.value = true;
+  updateManageTrustedProxiesApi({
+    trusted_proxies: trustedProxiesFormData.trusted_proxies,
+  })
+    .then((res) => {
+      if (res.code === 0) {
+        MessagePlugin.success(t('common.tips.save_success'));
+      } else {
+        MessagePlugin.error(res.msg || t('common.tips.save_failed'));
+      }
+    })
+    .catch(() => {
+      MessagePlugin.error(t('common.tips.save_failed'));
+    })
+    .finally(() => {
+      trustedProxiesLoading.value = false;
     });
 }
 
