@@ -10,6 +10,7 @@ export const CODE = {
   AUTH_FAILURE: -999,
   NEED_OTP_CODE: -2,
   NEED_BIND_2FA: -3,
+  NEED_CHANGE_PWD: -4,
 } as const;
 
 /** 后端统一响应结构（data 在拦截器内已解密并反序列化） */
@@ -61,6 +62,11 @@ instance.interceptors.response.use(
       router.replace({ path: '/login' });
     } else if (data.code === CODE.NEED_BIND_2FA) {
       router.replace({ path: '/account/otp' });
+    } else if (data.code === CODE.NEED_CHANGE_PWD) {
+      // 服务端强制改密门：令牌未改密即访问其他接口时触发，引导回登录重新进入强制改密流程
+      saveCurrentUrl();
+      clearLocalStorageExceptPreserved();
+      router.replace({ path: '/login' });
     }
     return data as any;
   },
