@@ -69,6 +69,41 @@
       </t-loading>
     </t-card>
 
+    <!-- CORS 跨域白名单卡片 -->
+    <t-card class="list-card-container">
+      <template #header>
+        <t-row justify="space-between">
+          <div class="card-header-title">
+            <t-space>
+              <div>{{ t('page.vpconfig.cors_title') }}</div>
+              <t-tooltip :content="t('page.vpconfig.cors_description')">
+                <help-circle-icon />
+              </t-tooltip>
+            </t-space>
+          </div>
+          <t-space>
+            <t-button theme="primary" @click="fetchCors">{{ t('common.refresh') }}</t-button>
+            <t-button theme="primary" @click="handleCorsSave">{{ t('common.save') }}</t-button>
+          </t-space>
+        </t-row>
+      </template>
+
+      <t-loading :loading="corsLoading">
+        <t-form :data="corsFormData" :label-width="180">
+          <t-form-item :label="t('page.vpconfig.cors_origins')">
+            <div style="width: 100%">
+              <t-textarea
+                v-model="corsFormData.cors_allow_origins"
+                :placeholder="t('page.vpconfig.cors_placeholder')"
+                :autosize="{ minRows: 3, maxRows: 8 }"
+              />
+              <div class="form-item-tips">{{ t('page.vpconfig.cors_tips') }}</div>
+            </div>
+          </t-form-item>
+        </t-form>
+      </t-loading>
+    </t-card>
+
     <!-- 域名白名单卡片 -->
     <t-card class="list-card-container">
       <template #header>
@@ -408,6 +443,8 @@ import {
   updateDomainWhitelistApi,
   updateIpWhitelistApi,
   updateManageTrustedProxiesApi,
+  getCorsAllowOriginsApi,
+  updateCorsAllowOriginsApi,
   updateNoticeTitleApi,
   updateSecurityEntryApi,
   updateSslEnableApi,
@@ -459,6 +496,11 @@ const trustedProxiesFormData = reactive({
   trusted_proxies: '',
 });
 const trustedProxiesLoading = ref(false);
+// CORS 跨域来源白名单（配置存 config.yml，回环/本机始终放行）
+const corsFormData = reactive({
+  cors_allow_origins: '',
+});
+const corsLoading = ref(false);
 const sslFormData = reactive({
   ssl_enable: false,
   has_cert: false,
@@ -508,6 +550,7 @@ const securityEntryFullUrl = computed(() => {
 onMounted(() => {
   fetchData();
   fetchTrustedProxies();
+  fetchCors();
   fetchDomainWhitelist();
   fetchSslStatus();
   fetchSslForceHttps();
@@ -570,6 +613,44 @@ function handleTrustedProxiesSave() {
     })
     .finally(() => {
       trustedProxiesLoading.value = false;
+    });
+}
+
+function fetchCors() {
+  corsLoading.value = true;
+  getCorsAllowOriginsApi({})
+    .then((res) => {
+      if (res.code === 0) {
+        corsFormData.cors_allow_origins = res.data.cors_allow_origins || '';
+      } else {
+        MessagePlugin.error(res.msg || t('common.tips.api_error'));
+      }
+    })
+    .catch(() => {
+      MessagePlugin.error(t('common.tips.api_error'));
+    })
+    .finally(() => {
+      corsLoading.value = false;
+    });
+}
+
+function handleCorsSave() {
+  corsLoading.value = true;
+  updateCorsAllowOriginsApi({
+    cors_allow_origins: corsFormData.cors_allow_origins,
+  })
+    .then((res) => {
+      if (res.code === 0) {
+        MessagePlugin.success(t('common.tips.save_success'));
+      } else {
+        MessagePlugin.error(res.msg || t('common.tips.save_failed'));
+      }
+    })
+    .catch(() => {
+      MessagePlugin.error(t('common.tips.save_failed'));
+    })
+    .finally(() => {
+      corsLoading.value = false;
     });
 }
 

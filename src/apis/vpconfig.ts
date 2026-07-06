@@ -36,6 +36,24 @@ export function updateManageTrustedProxiesApi(data: Record<string, any>) {
   });
 }
 
+/** 获取CORS跨域来源白名单 */
+export function getCorsAllowOriginsApi(params: Record<string, any>) {
+  return request({
+    url: 'vipconfig/getCorsAllowOrigins',
+    method: 'get',
+    params,
+  });
+}
+
+/** 更新CORS跨域来源白名单 */
+export function updateCorsAllowOriginsApi(data: Record<string, any>) {
+  return request({
+    url: 'vipconfig/updateCorsAllowOrigins',
+    method: 'post',
+    data,
+  });
+}
+
 /** 更新SSL启用状态 */
 export function updateSslEnableApi(data: Record<string, any>) {
   return request({
