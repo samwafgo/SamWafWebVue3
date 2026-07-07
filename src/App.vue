@@ -13,6 +13,7 @@ import { clearLocalStorageExceptPreserved, saveCurrentUrl } from '@/constants';
 import { useStatsStore } from '@/store/modules/stats';
 import { useNotificationStore } from '@/store/modules/notification';
 import { useSettingStore } from '@/store/modules/setting';
+import { GetSystemParamsApi } from '@/apis/sysinfo';
 
 const env = import.meta.env.MODE || 'development';
 
@@ -126,5 +127,18 @@ onMounted(() => {
   // 应用本地保存的页面配置（暗黑模式/主题色）
   useSettingStore().initTheme();
   initWebSocket();
+  // 拉取系统参数并缓存应急入口路径，供 utils/request.ts 的「请求超时」通知里的「应急恢复」使用。
+  // 提前缓存（登录后即取），确保后端变慢/超时时也能拿到路径。
+  if (localStorage.getItem('access_token')) {
+    GetSystemParamsApi()
+      .then((res: any) => {
+        if (res?.code === 0) {
+          try {
+            localStorage.setItem('__samwaf_emergency_path__', res.data?.emergency_path || '');
+          } catch (e) { /* ignore */ }
+        }
+      })
+      .catch(() => { /* 静默失败，不影响主流程 */ });
+  }
 });
 </script>
