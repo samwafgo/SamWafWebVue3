@@ -4,6 +4,10 @@ export const RULE = {
   is_manual_rule: '1',
   rule_status: 1,
   rule_content: '',
+  // 命中动作：deny(拦截,默认) / allow(放行) / log(仅记录)
+  rule_action: 'deny',
+  // allow 时可跳过的检测模块（["ALL"]=全部）
+  rule_action_skips: [] as string[],
   rule_base: {
     salience: 10,
     rule_name: '规则名称',

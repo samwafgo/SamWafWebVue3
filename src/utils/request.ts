@@ -4,6 +4,7 @@ import { API_HOST } from '@/config/host';
 import router from '@/router';
 import { AesDecrypt, AesEncrypt } from '@/utils/crypto';
 import { clearLocalStorageExceptPreserved, saveCurrentUrl } from '@/constants';
+import { getRequestTimeout, DEFAULT_REQUEST_TIMEOUT } from '@/config/requestTimeout';
 import { h } from 'vue';
 import { NotifyPlugin, DialogPlugin, MessagePlugin, Button as TButton } from 'tdesign-vue-next';
 
@@ -78,7 +79,9 @@ export interface ApiResponse<T = any> {
 
 const instance = axios.create({
   baseURL: API_HOST,
-  timeout: 5000,
+  // 不在此写死超时：改到请求拦截器里按 localStorage 动态取（getRequestTimeout），
+  // 这样"设置抽屉-常规设置"改完立即生效，无需刷新；单条请求也可自带更长超时（如 AI 生成）。
+  timeout: 0,
   withCredentials: true,
   transformRequest: [
     (data) => {
@@ -99,6 +102,11 @@ instance.interceptors.request.use((config) => {
   // 防重放校验所需的时间戳与请求唯一标识
   config.headers['X-Request-Time'] = Math.floor(Date.now() / 1000).toString();
   config.headers['X-Request-Id'] = uuidv4();
+  // 未显式指定超时的请求，按当前 localStorage 配置动态套用（0/未设都视为未指定）；
+  // 单条请求自带的超时（如 AI 生成的长超时）保持不变。
+  if (!config.timeout) {
+    config.timeout = getRequestTimeout();
+  }
   return config;
 });
 
@@ -134,7 +142,7 @@ instance.interceptors.response.use(
       (typeof err.message === 'string' && err.message.indexOf('timeout') !== -1);
     if (isTimeout) {
       try {
-        const seconds = Math.round((((err.config && err.config.timeout) || 5000)) / 1000);
+        const seconds = Math.round((((err.config && err.config.timeout) || DEFAULT_REQUEST_TIMEOUT)) / 1000);
         const now = Date.now();
         if (now - lastTimeoutNotifyAt > 3000) {
           lastTimeoutNotifyAt = now;

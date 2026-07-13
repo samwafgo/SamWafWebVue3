@@ -8,6 +8,8 @@
     class="setting-drawer-container"
   >
     <div class="setting-container">
+      <t-tabs default-value="theme" class="setting-tabs">
+      <t-tab-panel value="theme" :label="t('page.right_setting.tab_theme')">
       <div class="setting-group-title">{{ t('page.right_setting.theme_mode') }}</div>
       <t-radio-group :value="settingStore.mode" @change="(v: any) => settingStore.updateConfig({ mode: v })">
         <div v-for="item in modeOptions" :key="item.type" class="setting-layout-drawer">
@@ -44,22 +46,69 @@
           {{ t('page.right_setting.clear_settings') }}
         </t-button>
       </div>
+      </t-tab-panel>
+
+      <t-tab-panel value="general" :label="t('page.right_setting.tab_general')">
+        <div class="setting-group-title">{{ t('page.right_setting.local_timeout_title') }}</div>
+        <div class="local-timeout-body">
+          <t-input-number
+            v-model="localTimeoutSec"
+            :min="localTimeoutMinSec"
+            :max="localTimeoutMaxSec"
+            :step="1"
+            theme="column"
+            style="width: 150px"
+          />
+          <span class="local-timeout-unit">{{ t('page.right_setting.local_timeout_unit') }}</span>
+          <t-button theme="primary" @click="saveLocalTimeout">{{ t('common.save') }}</t-button>
+          <t-button variant="outline" @click="resetLocalTimeout">{{ t('page.right_setting.local_timeout_reset') }}</t-button>
+        </div>
+        <div class="local-timeout-tip">
+          {{ t('page.right_setting.local_timeout_tip', { def: localTimeoutDefaultSec }) }}
+        </div>
+      </t-tab-panel>
+      </t-tabs>
     </div>
   </t-drawer>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin } from 'tdesign-vue-next';
 import { useSettingStore } from '@/store/modules/setting';
 import { COLOR_OPTIONS } from '@/config/color';
+import {
+  getRequestTimeout,
+  setRequestTimeout,
+  DEFAULT_REQUEST_TIMEOUT,
+  MIN_REQUEST_TIMEOUT,
+  MAX_REQUEST_TIMEOUT,
+} from '@/config/requestTimeout';
 import settingLightIcon from '@/assets/assets-setting-light.svg';
 import settingDarkIcon from '@/assets/assets-setting-dark.svg';
 import settingAutoIcon from '@/assets/assets-setting-auto.svg';
 
 const { t } = useI18n();
 const settingStore = useSettingStore();
+
+// 前端请求超时（浏览器本地设置，单位秒）
+const localTimeoutSec = ref(Math.round(getRequestTimeout() / 1000));
+const localTimeoutMinSec = Math.round(MIN_REQUEST_TIMEOUT / 1000);
+const localTimeoutMaxSec = Math.round(MAX_REQUEST_TIMEOUT / 1000);
+const localTimeoutDefaultSec = Math.round(DEFAULT_REQUEST_TIMEOUT / 1000);
+
+function saveLocalTimeout() {
+  const savedMs = setRequestTimeout(Number(localTimeoutSec.value) * 1000);
+  localTimeoutSec.value = Math.round(savedMs / 1000);
+  MessagePlugin.success(t('page.right_setting.local_timeout_saved'));
+}
+
+function resetLocalTimeout() {
+  const savedMs = setRequestTimeout(DEFAULT_REQUEST_TIMEOUT);
+  localTimeoutSec.value = Math.round(savedMs / 1000);
+  MessagePlugin.success(t('page.right_setting.local_timeout_saved'));
+}
 
 const modeOptions = computed(() => [
   { type: 'light', text: t('page.right_setting.theme_mode_color_light'), icon: settingLightIcon },
@@ -155,5 +204,23 @@ function handleClearSettings() {
   margin-top: 24px;
   padding-top: 16px;
   border-top: 1px solid var(--td-component-border);
+}
+
+.setting-drawer-container .local-timeout-body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.setting-drawer-container .local-timeout-unit {
+  color: var(--td-text-color-secondary);
+}
+
+.setting-drawer-container .local-timeout-tip {
+  color: var(--td-text-color-placeholder);
+  font-size: 12px;
+  margin-top: 12px;
+  line-height: 1.6;
 }
 </style>

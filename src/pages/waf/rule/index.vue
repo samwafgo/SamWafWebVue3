@@ -1,7 +1,8 @@
 <template>
   <div>
     <t-card class="list-card-container">
-      <t-row justify="space-between">
+      <!-- 操作区：左侧增删操作 + 右侧编排模式(配置入口) -->
+      <div class="rule-toolbar-actions">
         <div class="left-operation-container">
           <t-button @click="handleAddRule">{{ t('page.rule.button_add_rule') }}</t-button>
           <t-button theme="danger" variant="outline" :disabled="selectedRowKeys.length === 0" @click="handleBatchDelete">
@@ -11,29 +12,35 @@
             {{ t('page.rule.button_clear_all') }}
           </t-button>
         </div>
-        <div class="right-operation-container">
-          <t-form :data="searchformData" :label-width="80" layout="inline" colon :style="{ marginBottom: '8px' }">
-            <t-form-item :label="t('page.rule.label_website')" name="host_code">
-              <t-select v-model="searchformData.host_code" clearable filterable :style="{ width: '150px' }">
-                <t-option v-for="(item, index) in host_dic" :key="index" :value="index" :label="item">
-                  {{ item }}
-                </t-option>
-              </t-select>
-            </t-form-item>
-            <t-form-item :label="t('page.rule.label_rule_name')" name="rule_name">
-              <t-input v-model="searchformData.rule_name" class="search-input" clearable />
-            </t-form-item>
-            <t-form-item :label="t('page.rule.label_rule_code')" name="rule_code">
-              <t-input v-model="searchformData.rule_code" class="search-input" clearable />
-            </t-form-item>
-            <t-form-item>
-              <t-button theme="primary" :style="{ marginLeft: '8px' }" @click="getList()">
-                {{ t('common.search') }}
-              </t-button>
-            </t-form-item>
-          </t-form>
-        </div>
-      </t-row>
+        <t-button theme="primary" variant="outline" class="chain-mode-btn" @click="openChainMode">
+          <template #icon><swap-icon /></template>
+          {{ t('page.rule.chain_mode.entry') }}
+        </t-button>
+      </div>
+
+      <!-- 筛选区：单独一行 -->
+      <div class="rule-toolbar-search">
+        <t-form :data="searchformData" :label-width="70" layout="inline" colon>
+          <t-form-item :label="t('page.rule.label_website')" name="host_code">
+            <t-select v-model="searchformData.host_code" clearable filterable :style="{ width: '150px' }">
+              <t-option v-for="(item, index) in host_dic" :key="index" :value="index" :label="item">
+                {{ item }}
+              </t-option>
+            </t-select>
+          </t-form-item>
+          <t-form-item :label="t('page.rule.label_rule_name')" name="rule_name">
+            <t-input v-model="searchformData.rule_name" class="search-input" clearable />
+          </t-form-item>
+          <t-form-item :label="t('page.rule.label_rule_code')" name="rule_code">
+            <t-input v-model="searchformData.rule_code" class="search-input" clearable />
+          </t-form-item>
+          <t-form-item>
+            <t-button theme="primary" @click="getList()">
+              {{ t('common.search') }}
+            </t-button>
+          </t-form-item>
+        </t-form>
+      </div>
 
       <t-alert theme="info" :message="t('page.rule.alert_message')" close>
         <template #operation>
@@ -98,6 +105,26 @@
     >
       {{ t('page.rule.confirm_clear_all') }}
     </t-dialog>
+
+    <!-- 规则编排模式设置(rule_chain_mode) -->
+    <t-dialog v-model:visible="chainModeVisible" :header="t('page.rule.chain_mode.title')" width="640px" :footer="false">
+      <t-alert theme="info" :message="t('page.rule.chain_mode.intro')" style="margin-bottom: 12px" />
+      <t-radio-group v-model="chainMode" class="chain-mode-group">
+        <div v-for="opt in chainModeOptions" :key="opt.value" class="chain-mode-item" @click="chainMode = opt.value">
+          <t-radio :value="opt.value">
+            <span class="chain-mode-label">{{ opt.label }}</span>
+            <t-tag v-if="opt.recommend" theme="success" variant="light" size="small" class="chain-mode-tag">
+              {{ t('page.rule.chain_mode.recommend') }}
+            </t-tag>
+          </t-radio>
+          <div class="chain-mode-desc">{{ opt.desc }}</div>
+        </div>
+      </t-radio-group>
+      <div class="chain-mode-ops">
+        <t-button theme="primary" :loading="chainModeSaving" @click="saveChainMode">{{ t('common.save') }}</t-button>
+        <t-button variant="outline" @click="chainModeVisible = false">{{ t('common.close') }}</t-button>
+      </div>
+    </t-dialog>
   </div>
 </template>
 
@@ -106,8 +133,10 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin, type PageInfo, type TableProps } from 'tdesign-vue-next';
+import { SwapIcon } from 'tdesign-icons-vue-next';
 import { getOnlineUrl } from '@/utils/usuallytool';
 import { wafRuleListApi, wafRuleDelApi, wafRuleBatchDelApi, wafRuleDelAllApi, changeRuleStatus } from '@/apis/rules';
+import { get_detail_by_item_api, edit_system_config_by_item_api } from '@/apis/systemconfig';
 import { allhost } from '@/apis/host';
 
 const { t } = useI18n();
@@ -116,6 +145,58 @@ const router = useRouter();
 const batchDeleteVisible = ref(false);
 const clearAllVisible = ref(false);
 const confirmVisible = ref(false);
+
+// 规则编排模式(rule_chain_mode)：0 默认(CC之后)，1 规则优先(推荐/最新)
+const chainModeVisible = ref(false);
+const chainModeSaving = ref(false);
+const chainMode = ref('0');
+const chainModeOptions = computed(() => [
+  {
+    value: '0',
+    label: t('page.rule.chain_mode.mode0_label'),
+    desc: t('page.rule.chain_mode.mode0_desc'),
+    recommend: false,
+  },
+  {
+    value: '1',
+    label: t('page.rule.chain_mode.mode1_label'),
+    desc: t('page.rule.chain_mode.mode1_desc'),
+    recommend: true,
+  },
+]);
+
+// 打开"规则编排模式"设置并读取当前值
+function openChainMode() {
+  chainModeVisible.value = true;
+  get_detail_by_item_api({ item: 'rule_chain_mode' })
+    .then((res) => {
+      if (res.code === 0 && res.data) {
+        chainMode.value = res.data.value === '1' ? '1' : '0';
+      }
+    })
+    .catch((e: Error) => console.log(e));
+}
+
+// 保存"规则编排模式"（走系统配置 editByItem，后端会热同步到 global）
+function saveChainMode() {
+  chainModeSaving.value = true;
+  edit_system_config_by_item_api({ item: 'rule_chain_mode', value: chainMode.value })
+    .then((res) => {
+      if (res.code === 0) {
+        MessagePlugin.success(t('page.rule.chain_mode.saved'));
+        chainModeVisible.value = false;
+      } else {
+        MessagePlugin.warning(res.msg || t('page.rule.chain_mode.save_fail'));
+      }
+    })
+    .catch((e: Error) => {
+      console.log(e);
+      MessagePlugin.error(t('page.rule.chain_mode.save_fail'));
+    })
+    .finally(() => {
+      chainModeSaving.value = false;
+    });
+}
 
 const dataLoading = ref(false);
 const data = ref<Record<string, any>[]>([]);
@@ -338,15 +419,79 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 操作区：增删操作(左) + 编排模式(右) 一行分列 */
+.rule-toolbar-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+/* 筛选区：单独一行，与操作区用分隔线区隔 */
+.rule-toolbar-search {
+  padding-top: 12px;
+  border-top: 1px solid var(--td-component-stroke);
+  margin-bottom: 8px;
+}
+
+.rule-toolbar-search :deep(.t-form__item) {
+  margin-bottom: 8px;
+}
+
+.chain-mode-btn :deep(.t-icon) {
+  margin-right: 4px;
+}
+
 .left-operation-container {
-  padding: 0 0 6px 0;
-  margin-bottom: 16px;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
 }
 
 .search-input {
   width: 200px;
+}
+
+.chain-mode-group {
+  display: block;
+  width: 100%;
+}
+
+.chain-mode-item {
+  border: 1px solid var(--td-component-border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+
+.chain-mode-item:hover {
+  border-color: var(--td-brand-color);
+}
+
+.chain-mode-label {
+  font-weight: 500;
+}
+
+.chain-mode-tag {
+  margin-left: 8px;
+}
+
+.chain-mode-desc {
+  color: var(--td-text-color-secondary);
+  font-size: 12px;
+  margin-top: 6px;
+  padding-left: 24px;
+  line-height: 1.6;
+}
+
+.chain-mode-ops {
+  margin-top: 16px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 </style>

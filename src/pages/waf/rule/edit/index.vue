@@ -41,6 +41,34 @@
 
       <!--UI Rule -->
       <div v-if="formData.is_manual_rule == '0'">
+        <!--命中动作 开始-->
+        <t-card :title="t('page.rule.detail.rule_action')">
+          <t-form-item :label="t('page.rule.detail.rule_action')" name="rule_action">
+            <t-select v-model="formData.rule_action" :style="{ width: '480px' }" @change="onRuleActionChange">
+              <t-option v-for="(item, index) in ruleActionOptions" :key="index" :value="item.value" :label="item.label">
+                {{ item.label }}
+              </t-option>
+            </t-select>
+          </t-form-item>
+          <t-form-item v-if="formData.rule_action === 'allow'" :label="t('page.rule.detail.rule_action_skips')" name="rule_action_skips">
+            <t-select
+              v-model="formData.rule_action_skips"
+              :style="{ width: '480px' }"
+              multiple
+              :min-collapsed-num="4"
+              :placeholder="t('page.rule.detail.rule_action_skips_placeholder')"
+              @change="onRuleActionSkipsChange"
+            >
+              <t-option v-for="(item, index) in ruleSkipModuleOptions" :key="index" :value="item.value" :label="item.label">
+                {{ item.label }}
+              </t-option>
+            </t-select>
+            <t-tooltip :content="t('page.rule.detail.rule_action_skips_tip')">
+              <help-circle-icon style="margin-left: 8px; color: #999" />
+            </t-tooltip>
+          </t-form-item>
+        </t-card>
+        <!--命中动作 结束-->
         <!--规则编排 开始-->
         <t-card :title="t('page.rule.detail.write_rule')">
           <t-button theme="primary" @click="ruleDynAdd('cond')">
@@ -116,6 +144,50 @@
           <t-row>
             <!-- 左侧代码编辑区域 -->
             <t-col flex="auto">
+              <!-- AI 生成规则面板 -->
+              <div class="ai-gen-panel">
+                <div class="ai-gen-head">
+                  <help-circle-icon class="ai-gen-icon" />
+                  <span class="ai-gen-title">{{ t('page.rule.detail.ai_gen_title') }}</span>
+                  <t-link theme="primary" hover="color" size="small" @click="openAiPrompt">
+                    {{ t('page.rule.detail.ai_prompt_entry') }}
+                  </t-link>
+                  <t-link theme="default" hover="color" size="small" class="ai-gen-setting" @click="openGptConfig">
+                    <setting-icon />
+                    <span>{{ t('page.rule.detail.gpt_config_entry') }}</span>
+                  </t-link>
+                </div>
+                <div class="ai-gen-body">
+                  <t-textarea v-model="aiGenIntent" :autosize="{ minRows: 2, maxRows: 4 }" :placeholder="t('page.rule.detail.ai_gen_placeholder')" />
+                  <div class="ai-gen-ops">
+                    <t-button theme="primary" :loading="aiGenLoading" @click="onAiGenRule">
+                      {{ t('page.rule.detail.ai_gen_btn') }}
+                    </t-button>
+                    <span class="ai-gen-hint">{{ t('page.rule.detail.ai_gen_hint') }}</span>
+                  </div>
+                  <!-- 生成结果 -->
+                  <div v-if="aiGenResult" class="ai-gen-result">
+                    <div class="ai-gen-result-head">
+                      <t-tag v-if="aiGenResult.valid" theme="success" variant="light" size="small">
+                        {{ t('page.rule.detail.ai_gen_valid') }}
+                      </t-tag>
+                      <t-tag v-else theme="warning" variant="light" size="small">
+                        {{ t('page.rule.detail.ai_gen_invalid') }}
+                      </t-tag>
+                      <t-tag v-if="aiGenResult.action" :theme="ruleActionTheme(aiGenResult.action)" variant="light" size="small">
+                        {{ ruleActionLabel(aiGenResult.action) }}
+                      </t-tag>
+                      <span v-if="!aiGenResult.valid && aiGenResult.error" class="ai-gen-err">{{ aiGenResult.error }}</span>
+                    </div>
+                    <pre class="example-code">{{ aiGenResult.rule_content }}</pre>
+                    <div class="ai-gen-result-ops">
+                      <t-button size="small" theme="primary" @click="applyAiGenRule">{{ t('page.rule.detail.example_apply') }}</t-button>
+                      <t-button size="small" variant="outline" @click="copyExample(aiGenResult.rule_content)">{{ t('page.rule.detail.example_copy') }}</t-button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div class="rule-example-header">
                 <code-icon />
                 <span class="rule-example-title">{{ t('page.rule.detail.manual_code_rule_edit') }}</span>
@@ -123,183 +195,77 @@
               <write-rule :valuecontent="formCodemirrorContent" @edtinput="(v: string) => (formCodemirrorContent = v)" />
 
               <div class="rule-example-container">
-                <!-- 使用 Tab 横向展示示例 -->
-                <t-tabs default-value="basic" theme="card">
-                  <!-- 基础示例 -->
-                  <t-tab-panel value="basic" label="📖 基础示例">
-                    <t-alert theme="info" :title="t('page.rule.detail.example_code')" style="margin-bottom: 12px">
-                      <template #message>
-                        <pre>
- rule R80798f795d7947419ba6f593708b40d9 "禁止来自中国以外的访客访问" salience 10 {
-              when
-                MF.COUNTRY != "中国"
-              then
-                Retract("R80798f795d7947419ba6f593708b40d9");
-            }</pre
-                        >
-                      </template>
-                    </t-alert>
+                <!-- 顶部工具条：分类 + 视图切换 -->
+                <div class="example-toolbar">
+                  <t-radio-group v-model="exampleCategory" variant="default-filled" size="small">
+                    <t-radio-button v-for="cat in ruleExampleCategories" :key="cat.value" :value="cat.value">
+                      {{ cat.label }}
+                    </t-radio-button>
+                  </t-radio-group>
+                  <t-radio-group v-model="exampleViewMode" variant="primary-filled" size="small" class="example-view-switch">
+                    <t-radio-button v-for="mode in ruleExampleViewModes" :key="mode.value" :value="mode.value">
+                      {{ mode.label }}
+                    </t-radio-button>
+                  </t-radio-group>
+                </div>
 
-                    <div v-show="showMore.basic">
-                      <t-alert theme="info" :title="t('page.rule.detail.example_code')" style="margin-bottom: 12px">
-                        <template #message>
-                          <pre>
- rule R80798f795d7947419ba6f593708b4012 "禁止满足条件的Header访客访问" salience 10 {
-              when
-                MF.GetHeaderValue("Accept").Contains("text/plain") == True
-              then
-                Retract("R80798f795d7947419ba6f593708b4012");
-            }</pre
-                          >
-                        </template>
-                      </t-alert>
-
-                      <t-alert theme="info" :title="t('page.rule.detail.example_code')">
-                        <template #message>
-                          <pre>
- rule R80798f795d7947419ba6f593708b4013 "禁止5分钟内失败10次的IP访问" salience 10 {
-              when
-                MF.GetIPFailureCount(5) > 10
-              then
-                Retract("R80798f795d7947419ba6f593708b4013");
-            }</pre
-                          >
-                        </template>
-                      </t-alert>
+                <div class="example-body">
+                  <!-- 卡片模式 -->
+                  <div v-if="exampleViewMode === 'card'" class="example-cards">
+                    <div v-for="(ex, exIndex) in filteredExamples" :key="exIndex" class="example-card">
+                      <div class="example-card-head">
+                        <t-tag :theme="ruleActionTheme(ex.action)" variant="light" size="small">{{ ruleActionLabel(ex.action) }}</t-tag>
+                        <span class="example-card-title">{{ ex.title }}</span>
+                        <div class="example-card-ops">
+                          <t-button size="small" variant="text" @click="copyExample(ex.code)">{{ t('page.rule.detail.example_copy') }}</t-button>
+                          <t-button v-if="!ex.multi" size="small" variant="text" theme="primary" @click="applyExample(ex)">{{ t('page.rule.detail.example_apply') }}</t-button>
+                        </div>
+                      </div>
+                      <div class="example-card-desc">{{ ex.desc }}</div>
+                      <pre class="example-code">{{ ex.code }}</pre>
                     </div>
+                  </div>
 
-                    <div style="text-align: center; margin-top: 12px">
-                      <t-button theme="default" variant="text" @click="toggleShowMore('basic')">
-                        <template v-if="!showMore.basic"><chevron-down-icon /> 显示更多 (2)</template>
-                        <template v-else><chevron-up-icon /> 收起</template>
-                      </t-button>
+                  <!-- 表格模式 -->
+                  <t-table
+                    v-else-if="exampleViewMode === 'table'"
+                    :data="filteredExamples"
+                    :columns="exampleTableColumns"
+                    size="small"
+                    row-key="title"
+                    stripe
+                    hover
+                    bordered
+                  >
+                    <template #actionTag="{ row }">
+                      <t-tag :theme="ruleActionTheme(row.action)" variant="light" size="small">{{ ruleActionLabel(row.action) }}</t-tag>
+                    </template>
+                    <template #ops="{ row }">
+                      <t-button size="small" variant="text" @click="copyExample(row.code)">{{ t('page.rule.detail.example_copy') }}</t-button>
+                      <t-button v-if="!row.multi" size="small" variant="text" theme="primary" @click="applyExample(row)">{{ t('page.rule.detail.example_apply') }}</t-button>
+                    </template>
+                  </t-table>
+
+                  <!-- 详解模式 -->
+                  <div v-else class="example-explain">
+                    <div v-for="(ex, exIndex) in filteredExamples" :key="exIndex" class="explain-item">
+                      <div class="explain-scene">
+                        <t-tag :theme="ruleActionTheme(ex.action)" variant="light" size="small">{{ ruleActionLabel(ex.action) }}</t-tag>
+                        <span class="explain-title">{{ ex.title }}</span>
+                      </div>
+                      <div class="explain-desc">{{ ex.desc }}</div>
+                      <pre class="example-code">{{ ex.code }}</pre>
+                      <div v-if="ex.effect" class="explain-effect">
+                        <strong>{{ t('page.rule.detail.example_effect') }}：</strong>{{ ex.effect }}
+                      </div>
+                      <div class="explain-ops">
+                        <t-button size="small" variant="outline" @click="copyExample(ex.code)">{{ t('page.rule.detail.example_copy') }}</t-button>
+                        <t-button v-if="!ex.multi" size="small" theme="primary" @click="applyExample(ex)">{{ t('page.rule.detail.example_apply') }}</t-button>
+                        <span v-if="ex.multi" class="explain-multi-tip">{{ t('page.rule.detail.example_multi_tip') }}</span>
+                      </div>
                     </div>
-                  </t-tab-panel>
-
-                  <!-- RF IP相关函数 -->
-                  <t-tab-panel value="rf_ip" label="🌐 IP地址判断">
-                    <t-alert theme="success" :title="t('page.rule.detail.example_ip_range')" style="margin-bottom: 12px">
-                      <template #message>
-                        <pre>
- rule R835f9bf09867473dbe873027241db107 "不允许特定内网网段访问" salience 10 {
-    when
-        RF.IPInRange(MF.SRC_IP, "172.16.0.0", "172.20.255.254") == true ||
-        RF.IPInRange(MF.SRC_IP, "192.168.0.0", "192.168.1.254") == true
-    then
-        Retract("R835f9bf09867473dbe873027241db107");
-}</pre
-                        >
-                      </template>
-                    </t-alert>
-
-                    <div v-show="showMore.rf_ip">
-                      <t-alert theme="success" :title="t('page.rule.detail.example_ip_ranges')" style="margin-bottom: 12px">
-                        <template #message>
-                          <pre>
- rule R835f9bf09867473dbe873027241db108 "不允许多个网段访问(类似SQL IN)" salience 10 {
-    when
-        RF.IPInRanges(MF.SRC_IP, "172.16.0.0-172.20.255.254", "192.168.0.0-192.168.1.254", "10.0.0.0/8") == true
-    then
-        Retract("R835f9bf09867473dbe873027241db108");
-}</pre
-                          >
-                        </template>
-                      </t-alert>
-
-                      <t-alert theme="success" :title="t('page.rule.detail.example_ip_cidr')">
-                        <template #message>
-                          <pre>
- rule R835f9bf09867473dbe873027241db109 "不允许CIDR网段访问" salience 10 {
-    when
-        RF.IPInCIDR(MF.SRC_IP, "192.168.1.0/24") == true
-    then
-        Retract("R835f9bf09867473dbe873027241db109");
-}</pre
-                          >
-                        </template>
-                      </t-alert>
-                    </div>
-
-                    <div style="text-align: center; margin-top: 12px">
-                      <t-button theme="default" variant="text" @click="toggleShowMore('rf_ip')">
-                        <template v-if="!showMore.rf_ip"><chevron-down-icon /> 显示更多 (2)</template>
-                        <template v-else><chevron-up-icon /> 收起</template>
-                      </t-button>
-                    </div>
-                  </t-tab-panel>
-
-                  <!-- RF 字符串函数 -->
-                  <t-tab-panel value="rf_string" label="📝 字符串判断">
-                    <t-alert theme="success" :title="t('page.rule.detail.example_method_in')" style="margin-bottom: 12px">
-                      <template #message>
-                        <pre>
- rule R835f9bf09867473dbe873027241db110 "不允许GET/POST方法" salience 10 {
-    when
-        RF.In(MF.METHOD, "GET", "POST") == true
-    then
-        Retract("R835f9bf09867473dbe873027241db110");
-}</pre
-                        >
-                      </template>
-                    </t-alert>
-
-                    <div v-show="showMore.rf_string">
-                      <t-alert theme="success" :title="t('page.rule.detail.example_contains_any')" style="margin-bottom: 12px">
-                        <template #message>
-                          <pre>
- rule R835f9bf09867473dbe873027241db111 "检测爬虫UserAgent" salience 10 {
-    when
-        RF.ContainsAnyIgnoreCase(MF.USER_AGENT, "bot", "spider", "crawler") == true
-    then
-        Retract("R835f9bf09867473dbe873027241db111");
-}</pre
-                          >
-                        </template>
-                      </t-alert>
-
-                      <t-alert theme="success" :title="t('page.rule.detail.example_url_check')">
-                        <template #message>
-                          <pre>
- rule R835f9bf09867473dbe873027241db112 "检测危险文件扩展名" salience 10 {
-    when
-        RF.EndsWithAny(MF.URL, ".php", ".asp", ".jsp", ".aspx") == true
-    then
-        Retract("R835f9bf09867473dbe873027241db112");
-}</pre
-                          >
-                        </template>
-                      </t-alert>
-                    </div>
-
-                    <div style="text-align: center; margin-top: 12px">
-                      <t-button theme="default" variant="text" @click="toggleShowMore('rf_string')">
-                        <template v-if="!showMore.rf_string"><chevron-down-icon /> 显示更多 (2)</template>
-                        <template v-else><chevron-up-icon /> 收起</template>
-                      </t-button>
-                    </div>
-                  </t-tab-panel>
-
-                  <!-- RF 数值函数 -->
-                  <t-tab-panel value="rf_number" label="🔢 数值判断">
-                    <t-alert theme="success" :title="t('page.rule.detail.example_status_range')">
-                      <template #message>
-                        <pre>
- rule R835f9bf09867473dbe873027241db113 "检测4xx错误状态码" salience 10 {
-    when
-        RF.IntInRange(MF.STATUS_CODE, 400, 499) == true
-    then
-        Retract("R835f9bf09867473dbe873027241db113");
-}</pre
-                        >
-                      </template>
-                    </t-alert>
-                  </t-tab-panel>
-                </t-tabs>
-
-                <t-link theme="danger" hover="color" href="https://update.samwaf.com/airule/auto_jump_url.html?v20250311" target="_blank">
-                  <template #suffix-icon><jump-icon /></template>
-                  {{ t('page.rule.detail.tutorial_online') }}
-                </t-link>
+                  </div>
+                </div>
               </div>
             </t-col>
 
@@ -307,43 +273,14 @@
             <t-col flex="450px">
               <div class="reference-container">
                 <t-tabs default-value="variables" theme="card">
-                  <!-- 系统变量 -->
                   <t-tab-panel value="variables" :label="t('page.rule.detail.system_variable')">
-                    <t-table
-                      :data="attrOptions"
-                      :columns="referenceColumns"
-                      size="small"
-                      :pagination="{ pageSize: 10 }"
-                      row-key="value"
-                      stripe
-                      hover
-                    />
+                    <t-table :data="attrOptions" :columns="referenceColumns" size="small" :pagination="{ pageSize: 10 }" row-key="value" stripe hover />
                   </t-tab-panel>
-
-                  <!-- 判断符号 -->
                   <t-tab-panel value="judge" :label="t('page.rule.detail.system_judge_symbol')">
-                    <t-table
-                      :data="attrJudgeOptions"
-                      :columns="referenceColumns"
-                      size="small"
-                      :pagination="{ pageSize: 10 }"
-                      row-key="value"
-                      stripe
-                      hover
-                    />
+                    <t-table :data="attrJudgeOptions" :columns="referenceColumns" size="small" :pagination="{ pageSize: 10 }" row-key="value" stripe hover />
                   </t-tab-panel>
-
-                  <!-- 关系符号 -->
                   <t-tab-panel value="relation" :label="t('page.rule.detail.system_relation_symbol')">
-                    <t-table
-                      :data="relationSymbolOptions"
-                      :columns="referenceColumns"
-                      size="small"
-                      :pagination="{ pageSize: 10 }"
-                      row-key="value"
-                      stripe
-                      hover
-                    />
+                    <t-table :data="relationSymbolOptions" :columns="referenceColumns" size="small" :pagination="{ pageSize: 10 }" row-key="value" stripe hover />
                   </t-tab-panel>
                 </t-tabs>
               </div>
@@ -360,6 +297,63 @@
         </t-space>
       </t-form-item>
     </t-form>
+
+    <!-- AI 提示词弹窗 -->
+    <t-dialog v-model:visible="aiPromptDialogVisible" :header="t('page.rule.detail.ai_prompt_title')" width="720px" :footer="false">
+      <div class="ai-prompt-tip">{{ t('page.rule.detail.ai_prompt_tip') }}</div>
+      <t-textarea v-model="aiPromptText" :autosize="{ minRows: 12, maxRows: 20 }" class="ai-prompt-textarea" />
+      <div class="ai-prompt-ops">
+        <t-button theme="primary" @click="copyAiPrompt">{{ t('page.rule.detail.example_copy') }}</t-button>
+        <t-button variant="outline" @click="aiPromptDialogVisible = false">{{ t('common.close') }}</t-button>
+      </div>
+    </t-dialog>
+
+    <!-- GPT 参数设置弹窗 -->
+    <t-dialog v-model:visible="gptConfigDialogVisible" :header="t('page.rule.detail.gpt_config_title')" width="760px" :footer="false">
+      <t-loading :loading="gptConfigLoading" size="small">
+        <t-form :data="gptConfig" :label-width="110" @submit.prevent>
+          <t-form-item :label="t('page.rule.detail.gpt_url')" name="gpt_url">
+            <t-input v-model="gptConfig.gpt_url" placeholder="https://api.deepseek.com" />
+          </t-form-item>
+          <t-form-item :label="t('page.rule.detail.gpt_model')" name="gpt_model">
+            <t-input v-model="gptConfig.gpt_model" placeholder="deepseek-chat" />
+          </t-form-item>
+          <t-form-item :label="t('page.rule.detail.gpt_token')" name="gpt_token">
+            <t-input
+              v-model="gptConfig.gpt_token"
+              type="password"
+              :placeholder="gptConfig.has_token ? t('page.rule.detail.gpt_token_set_placeholder') : t('page.rule.detail.gpt_token_empty_placeholder')"
+            />
+          </t-form-item>
+        </t-form>
+        <div class="gpt-token-tip">{{ t('page.rule.detail.gpt_token_tip') }}</div>
+
+        <div class="gpt-preset-title">{{ t('page.rule.detail.gpt_preset_title') }}</div>
+        <div class="gpt-preset-list">
+          <div v-for="(p, pIndex) in gptProviders" :key="pIndex" class="gpt-preset-item">
+            <div class="gpt-preset-main">
+              <span class="gpt-preset-name">{{ p.name }}</span>
+              <span class="gpt-preset-desc">{{ gptPresetDesc(p) }}</span>
+            </div>
+            <div class="gpt-preset-url">{{ p.url }}</div>
+            <div class="gpt-preset-models">
+              <t-tag v-for="(m, mIndex) in p.models" :key="mIndex" size="small" variant="light" class="gpt-preset-model" @click="applyGptPreset(p, m)">
+                {{ m }}
+              </t-tag>
+            </div>
+            <div class="gpt-preset-ops">
+              <t-button size="small" variant="outline" @click="applyGptPreset(p)">{{ t('page.rule.detail.gpt_preset_use') }}</t-button>
+              <t-link theme="primary" hover="color" size="small" :href="p.home" target="_blank">{{ t('page.rule.detail.gpt_preset_apply_key') }}</t-link>
+            </div>
+          </div>
+        </div>
+
+        <div class="ai-prompt-ops">
+          <t-button theme="primary" :loading="gptConfigSaving" @click="saveGptConfig">{{ t('common.submit') }}</t-button>
+          <t-button variant="outline" @click="gptConfigDialogVisible = false">{{ t('common.close') }}</t-button>
+        </div>
+      </t-loading>
+    </t-dialog>
 
     <!-- 测试规则弹窗 -->
     <t-dialog
@@ -412,7 +406,30 @@
           <t-alert v-if="testResult.is_match" theme="warning">
             <template #message>
               <div>{{ t('page.rule.detail.test_matched') }}</div>
-              <div v-if="testResult.matched_rules && testResult.matched_rules.length > 0">
+              <div v-if="testResult.effective_action" style="margin-top: 6px">
+                <strong>{{ t('page.rule.detail.test_effective_action') }}:</strong>
+                <t-tag :theme="ruleActionTheme(testResult.effective_action)" variant="light" style="margin-left: 6px">
+                  {{ ruleActionLabel(testResult.effective_action) }}
+                </t-tag>
+                <span v-if="testResult.effective_skip_modules && testResult.effective_skip_modules.length > 0" style="margin-left: 6px">
+                  {{ t('page.rule.detail.rule_action_skips') }}: {{ testResult.effective_skip_modules.join(', ') }}
+                </span>
+              </div>
+              <div v-if="testResult.matched_rule_details && testResult.matched_rule_details.length > 0" style="margin-top: 6px">
+                <strong>{{ t('page.rule.detail.test_matched_rules') }}:</strong>
+                <ul>
+                  <li v-for="(rule, index) in testResult.matched_rule_details" :key="index">
+                    {{ rule.rule_description }}
+                    <t-tag :theme="ruleActionTheme(rule.action)" variant="light" size="small" style="margin-left: 6px">
+                      {{ ruleActionLabel(rule.action) }}
+                    </t-tag>
+                    <span v-if="rule.skip_modules && rule.skip_modules.length > 0" style="color: #999; margin-left: 6px">
+                      ({{ rule.skip_modules.join(', ') }})
+                    </span>
+                  </li>
+                </ul>
+              </div>
+              <div v-else-if="testResult.matched_rules && testResult.matched_rules.length > 0">
                 <strong>{{ t('page.rule.detail.test_matched_rules') }}:</strong>
                 <ul>
                   <li v-for="(rule, index) in testResult.matched_rules" :key="index">{{ rule }}</li>
@@ -444,16 +461,26 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin, type FormProps } from 'tdesign-vue-next';
-import { JumpIcon, CodeIcon, ChevronDownIcon, ChevronUpIcon } from 'tdesign-icons-vue-next';
+import { CodeIcon, HelpCircleIcon, SettingIcon } from 'tdesign-icons-vue-next';
 import { v4 as uuidv4 } from 'uuid';
 
 import { RULE, RULE_RELATION_DETAIL, RULE_DO_ASSIGNMENT, RULE_DO_METHOD, RULE_DO_METHOD_PARM } from '@/service/service-rule';
 import { copyObj, getOnlineUrl } from '@/utils/usuallytool';
 import WriteRule from '@/components/write-rule/index.vue';
 import { allhost } from '@/apis/host';
-import { wafRuleEditApi, wafRuleAddApi, wafRuleDetailApi, wafRuleFormatApi, wafRuleTestApi } from '@/apis/rules';
+import {
+  wafRuleEditApi,
+  wafRuleAddApi,
+  wafRuleDetailApi,
+  wafRuleFormatApi,
+  wafRuleTestApi,
+  wafRuleAiGenApi,
+  wafRuleAiPromptApi,
+} from '@/apis/rules';
+import { wafGptConfigGetApi, wafGptConfigSaveApi } from '@/apis/gpt';
+import { GPT_PROVIDERS } from '@/utils/gptProviders';
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const route = useRoute();
 const router = useRouter();
 
@@ -467,6 +494,32 @@ const ruleManualOptions = computed(() => [
 const ruleStatusOptions = computed(() => [
   { label: t('page.rule.rule_on'), value: 1 },
   { label: t('page.rule.rule_off'), value: 0 },
+]);
+
+// 命中动作：拦截 / 放行 / 仅记录
+const ruleActionOptions = computed(() => [
+  { label: t('page.rule.detail.rule_action_deny'), value: 'deny' },
+  { label: t('page.rule.detail.rule_action_allow'), value: 'allow' },
+  { label: t('page.rule.detail.rule_action_log'), value: 'log' },
+]);
+
+// 放行时可跳过的检测模块（与后端 utils.RuleSkipModules 保持一致）
+const ruleSkipModuleOptions = computed(() => [
+  { label: t('page.rule.detail.skip_module_all'), value: 'ALL' },
+  { label: t('page.rule.detail.skip_module_bot'), value: 'BOT' },
+  { label: t('page.rule.detail.skip_module_sqli'), value: 'SQLI' },
+  { label: t('page.rule.detail.skip_module_xss'), value: 'XSS' },
+  { label: t('page.rule.detail.skip_module_scan'), value: 'SCAN' },
+  { label: t('page.rule.detail.skip_module_rce'), value: 'RCE' },
+  { label: t('page.rule.detail.skip_module_dir'), value: 'DIR' },
+  { label: t('page.rule.detail.skip_module_cc'), value: 'CC' },
+  { label: t('page.rule.detail.skip_module_ai'), value: 'AI' },
+  { label: t('page.rule.detail.skip_module_sensitive'), value: 'SENSITIVE' },
+  { label: t('page.rule.detail.skip_module_owasp'), value: 'OWASP' },
+  { label: t('page.rule.detail.skip_module_antileech'), value: 'ANTILEECH' },
+  { label: t('page.rule.detail.skip_module_csrf'), value: 'CSRF' },
+  { label: t('page.rule.detail.skip_module_upload'), value: 'UPLOAD' },
+  { label: t('page.rule.detail.skip_module_captcha'), value: 'CAPTCHA' },
 ]);
 
 const attrOptions = computed(() => [
@@ -509,6 +562,27 @@ const referenceColumns = computed(() => [
   { colKey: 'value', title: t('page.rule.detail.variable_key') },
 ]);
 
+// 示例浏览器：分类 / 视图 / 表格列
+const exampleCategory = ref('action');
+const exampleViewMode = ref('card');
+const ruleExampleCategories = computed(() => [
+  { value: 'action', label: t('page.rule.detail.example_cat_action') },
+  { value: 'scenario', label: t('page.rule.detail.example_cat_scenario') },
+  { value: 'combo', label: t('page.rule.detail.example_cat_combo') },
+  { value: 'function', label: t('page.rule.detail.example_cat_function') },
+]);
+const ruleExampleViewModes = computed(() => [
+  { value: 'card', label: t('page.rule.detail.example_view_card') },
+  { value: 'table', label: t('page.rule.detail.example_view_table') },
+  { value: 'explain', label: t('page.rule.detail.example_view_explain') },
+]);
+const exampleTableColumns = computed(() => [
+  { colKey: 'title', title: t('page.rule.detail.example_col_scene'), width: 200 },
+  { colKey: 'cond', title: t('page.rule.detail.example_col_cond'), ellipsis: true },
+  { colKey: 'actionTag', title: t('page.rule.detail.example_col_action'), width: 90 },
+  { colKey: 'ops', title: t('page.rule.detail.example_col_ops'), width: 130 },
+]);
+
 const formData = ref<Record<string, any>>({ ...copyObj(RULE) });
 const formCodemirrorContent = ref(''); // 代码编辑器内容
 const host_options = ref<{ value: string; label: string }[]>([]);
@@ -533,13 +607,81 @@ const testFormData = reactive({
 });
 const testResult = ref<Record<string, any> | null>(null);
 
-// 控制每个示例 tab 的展开状态
-const showMore = reactive<Record<string, boolean>>({
-  basic: false,
-  rf_ip: false,
-  rf_string: false,
-  rf_number: false,
-});
+// AI 提示词弹窗
+const aiPromptDialogVisible = ref(false);
+const aiPromptText = ref('');
+
+// GPT 参数设置弹窗
+const gptConfigDialogVisible = ref(false);
+const gptConfigLoading = ref(false);
+const gptConfigSaving = ref(false);
+const gptConfig = reactive<Record<string, any>>({ gpt_url: '', gpt_model: '', gpt_token: '', has_token: false });
+const gptProviders = GPT_PROVIDERS;
+
+// AI 生成规则
+const aiGenIntent = ref('');
+const aiGenLoading = ref(false);
+const aiGenResult = ref<Record<string, any> | null>(null);
+
+// 构造示例数据（四类：命中动作/实战场景/组合条件/函数大全）
+function buildRuleExamples() {
+  const mk = (o: Record<string, any>) => ({
+    cat: o.cat,
+    action: o.action || 'deny',
+    title: o.title,
+    desc: o.desc || '',
+    cond: o.cond || '',
+    effect: o.effect || '',
+    multi: o.multi || false,
+    code:
+      o.code ||
+      `rule Rexample "${o.title}" salience ${o.salience || 10} {\n    when\n        ${o.cond}\n    then\n        ${o.then || 'RF.Deny();'}\n}`,
+  });
+  return [
+    // ===== 命中动作 =====
+    mk({ cat: 'action', action: 'deny', title: '拦截（默认动作，可不写）', desc: '命中规则即阻止请求并返回拦截页。不写任何动作时默认就是拦截。', cond: 'MF.URL.Contains("/wp-admin") == true', then: 'RF.Deny();', effect: '命中的请求被拦截并记入攻击日志' }),
+    mk({ cat: 'action', action: 'allow', title: '放行（后续检测照常）', desc: '命中后不被自定义规则拦截，但 SQLI/XSS/CC 等后续检测仍会执行。', cond: 'RF.IPInCIDR(MF.SRC_IP, "192.168.0.0/16") == true && MF.URL.HasPrefix("/admin") == true', then: 'RF.Allow();', salience: 100, effect: '内网访问后台不被规则拦，但仍受其他防护保护' }),
+    mk({ cat: 'action', action: 'allow', title: '放行并跳过指定检测（CC/AI）', desc: '放行的同时跳过 CC、AI 检测。需在系统配置把"规则编排模式"设为"规则优先"才能跳过 CC 等前置检测。', cond: 'RF.IPEquals(MF.SRC_IP, "10.0.0.5") == true', then: 'RF.Allow("CC", "AI");', salience: 100, effect: '监控探针不触发限流和AI检测' }),
+    mk({ cat: 'action', action: 'allow', title: '完全放行（跳过后续所有检测）', desc: '白名单式直通后端，跳过后面全部检测环节。', cond: 'RF.IPInRanges(MF.SRC_IP, "203.0.113.10-203.0.113.20") == true', then: 'RF.AllowAll();', salience: 200, effect: '可信来源直达后端' }),
+    mk({ cat: 'action', action: 'log', title: '仅记录（灰度观察）', desc: '命中只记日志不拦截，用于新规则上线前观察是否会误伤。', cond: 'MF.USER_AGENT.Contains("python-requests") == true', then: 'RF.Log();', effect: '命中写入日志但请求正常放行，确认无误后再改为拦截' }),
+
+    // ===== 实战场景 =====
+    mk({ cat: 'scenario', action: 'deny', title: '拦截海外访问', desc: '只允许中国大陆访客，其余国家/地区一律拦截。', cond: 'MF.COUNTRY != "中国"', then: 'RF.Deny();', effect: '非中国大陆来源被拦截' }),
+    mk({ cat: 'scenario', action: 'deny', title: '拦截扫描器/攻击工具', desc: '通过 User-Agent 识别常见扫描器并拦截。', cond: 'RF.ContainsAnyIgnoreCase(MF.USER_AGENT, "sqlmap", "nikto", "nmap", "masscan", "acunetix") == true', then: 'RF.Deny();', effect: '常见扫描工具被挡在门外' }),
+    mk({ cat: 'scenario', action: 'deny', title: '登录接口暴力破解防护', desc: '5分钟内登录失败超过10次的IP，访问登录接口时拦截。', cond: 'MF.URL.HasPrefix("/login") == true && MF.GetIPFailureCount(5) > 10', then: 'RF.Deny();', effect: '高频失败的IP被封，防撞库/爆破' }),
+    mk({ cat: 'scenario', action: 'deny', title: '拦截危险文件访问', desc: '阻止访问 php/asp/jsp 等动态脚本文件（适合纯静态站）。', cond: 'RF.EndsWithAny(MF.URL, ".php", ".asp", ".jsp", ".aspx") == true', then: 'RF.Deny();', effect: '脚本文件访问被拒' }),
+    mk({ cat: 'scenario', action: 'deny', title: '拦截WordPress后台探测', desc: '挡掉针对 WordPress 常见路径的探测。', cond: 'RF.ContainsAny(MF.URL, "/wp-admin", "/wp-login.php", "/xmlrpc.php") == true', then: 'RF.Deny();', effect: 'WordPress 常见攻击面被保护' }),
+    mk({ cat: 'scenario', action: 'allow', title: '放行健康检查探针', desc: '放行监控探针对健康检查接口的访问，并跳过CC限流。', cond: 'RF.IPEquals(MF.SRC_IP, "10.0.0.5") == true && MF.URL.HasPrefix("/health") == true', then: 'RF.Allow("CC");', salience: 100, effect: '探针不被限流误封' }),
+    mk({ cat: 'scenario', action: 'log', title: '灰度观察可疑UA', desc: '先用仅记录观察一段时间，确认不会误伤真实用户后再改为拦截。', cond: 'RF.ContainsAnyIgnoreCase(MF.USER_AGENT, "curl", "wget", "python") == true', then: 'RF.Log();', effect: '命中只记录，方便评估规则准确度' }),
+
+    // ===== 组合条件 =====
+    mk({ cat: 'combo', action: 'deny', title: '多条件 AND（&&）', desc: '同时满足多个条件才命中：海外访客 且 访问登录接口。', cond: 'MF.COUNTRY != "中国" && MF.URL.HasPrefix("/login") == true', then: 'RF.Deny();', effect: '仅海外访问登录接口时才拦截' }),
+    mk({ cat: 'combo', action: 'deny', title: '多条件 OR（||）', desc: '满足任意一个条件即命中：多个内网段任一。', cond: 'RF.IPInCIDR(MF.SRC_IP, "10.0.0.0/8") == true || RF.IPInCIDR(MF.SRC_IP, "192.168.0.0/16") == true', then: 'RF.Deny();', effect: '任一内网段来源都会命中' }),
+    mk({ cat: 'combo', action: 'deny', title: '复合条件（非安全Bot + 高频失败）', desc: '不是搜索引擎等安全Bot，且短时间大量失败，判定为恶意。', cond: 'RF.Not(MF.IsSafeBot()) == true && MF.GetIPFailureCount(1) > 30', then: 'RF.Deny();', effect: '排除正规爬虫后拦截高频失败来源' }),
+    mk({ cat: 'combo', action: 'allow', title: 'salience 优先级（放行优先于拦截）', desc: '两条规则配合：办公室IP用高 salience 放行，海外访问用低 salience 拦截。命中多条时 salience 高者生效。需分两条规则分别创建。', multi: true, effect: '办公室IP即使来自海外也放行，其余海外访问被拦', code: `rule Roffice "办公室出口IP放行" salience 100 {\n    when\n        RF.IPInRanges(MF.SRC_IP, "203.0.113.10-203.0.113.20") == true\n    then\n        RF.Allow();\n}\n\nrule Roverseas "海外访问拦截" salience 10 {\n    when\n        MF.COUNTRY != "中国"\n    then\n        RF.Deny();\n}` }),
+
+    // ===== 函数大全 =====
+    mk({ cat: 'function', action: 'deny', title: 'IPInRange — IP区间判断', desc: '判断IP是否落在起止区间内。', cond: 'RF.IPInRange(MF.SRC_IP, "172.16.0.0", "172.20.255.254") == true', then: 'RF.Deny();' }),
+    mk({ cat: 'function', action: 'deny', title: 'IPInRanges — 多区间/CIDR（类似SQL IN）', desc: '一次判断多个区间或CIDR，任一命中即真。', cond: 'RF.IPInRanges(MF.SRC_IP, "172.16.0.0-172.20.255.254", "10.0.0.0/8") == true', then: 'RF.Deny();' }),
+    mk({ cat: 'function', action: 'deny', title: 'IPInCIDR — CIDR网段判断', desc: '判断IP是否在CIDR网段内。', cond: 'RF.IPInCIDR(MF.SRC_IP, "192.168.1.0/24") == true', then: 'RF.Deny();' }),
+    mk({ cat: 'function', action: 'deny', title: 'IPEquals — IP精确相等', desc: '标准化比较两个IP是否相等（支持IPv4/IPv6）。', cond: 'RF.IPEquals(MF.SRC_IP, "1.2.3.4") == true', then: 'RF.Deny();' }),
+    mk({ cat: 'function', action: 'deny', title: 'In / InIgnoreCase — 值在列表中', desc: '判断值是否等于列表中任意一个（IgnoreCase 忽略大小写）。', cond: 'RF.In(MF.METHOD, "PUT", "DELETE", "TRACE") == true', then: 'RF.Deny();' }),
+    mk({ cat: 'function', action: 'deny', title: 'ContainsAny — 包含任意子串', desc: '字符串是否包含列表中任意一个子串。', cond: 'RF.ContainsAny(MF.URL, "../", "%2e%2e", "..;/") == true', then: 'RF.Deny();' }),
+    mk({ cat: 'function', action: 'deny', title: 'ContainsAnyIgnoreCase — 包含任意（忽略大小写）', desc: '忽略大小写地判断是否包含任意子串。', cond: 'RF.ContainsAnyIgnoreCase(MF.USER_AGENT, "bot", "spider", "crawler") == true', then: 'RF.Deny();' }),
+    mk({ cat: 'function', action: 'deny', title: 'ContainsAll — 同时包含全部', desc: '字符串是否同时包含列表中全部子串。', cond: 'RF.ContainsAll(MF.URL, "/admin", ".php") == true', then: 'RF.Deny();' }),
+    mk({ cat: 'function', action: 'deny', title: 'StartsWithAny — 以任意前缀开头', desc: '字符串是否以列表中任意一个前缀开头。', cond: 'RF.StartsWithAny(MF.URL, "/admin", "/manage", "/api/internal") == true', then: 'RF.Deny();' }),
+    mk({ cat: 'function', action: 'deny', title: 'EndsWithAny — 以任意后缀结尾', desc: '字符串是否以列表中任意一个后缀结尾。', cond: 'RF.EndsWithAny(MF.URL, ".php", ".asp", ".jsp") == true', then: 'RF.Deny();' }),
+    mk({ cat: 'function', action: 'deny', title: 'IntInRange / IntIn — 数值判断', desc: 'IntInRange 判断整数是否在区间内；IntIn 判断是否等于列表中任意一个。', cond: 'RF.IntInRange(MF.PORT, 8000, 9000) == true', then: 'RF.Deny();' }),
+    mk({ cat: 'function', action: 'deny', title: 'Not / IsEmpty / IsNotEmpty — 逻辑辅助', desc: 'Not 取反；IsEmpty / IsNotEmpty 判断字符串是否为空。', cond: 'RF.IsEmpty(MF.USER_AGENT) == true', then: 'RF.Deny();', effect: '例如拦截没有 User-Agent 的请求' }),
+    mk({ cat: 'function', action: 'deny', title: 'LengthBetween — 长度区间', desc: '判断字符串长度是否在指定范围内。', cond: 'RF.LengthBetween(MF.URL, 512, 99999) == true', then: 'RF.Deny();', effect: '例如拦截超长URL' }),
+    mk({ cat: 'function', action: 'deny', title: 'GetHeaderValue — 取请求头', desc: '取指定请求头的值再做判断。', cond: 'MF.GetHeaderValue("X-Forwarded-For").Contains("127.0.0.1") == true', then: 'RF.Deny();' }),
+    mk({ cat: 'function', action: 'deny', title: 'GetIPFailureCount — 近N分钟失败次数', desc: '取该IP最近N分钟内的失败次数。', cond: 'MF.GetIPFailureCount(5) > 10', then: 'RF.Deny();' }),
+    mk({ cat: 'function', action: 'allow', title: 'IsSafeBot — 是否安全爬虫', desc: '识别搜索引擎等正规爬虫，可放行避免误伤SEO。', cond: 'MF.IsSafeBot() == true', then: 'RF.Allow();', salience: 100, effect: '放行 Google/Bing 等正规爬虫' }),
+  ];
+}
+
+const ruleExamples = ref(buildRuleExamples());
+const filteredExamples = computed(() => ruleExamples.value.filter((e) => e.cat === exampleCategory.value));
 
 watch(
   () => route.query.type,
@@ -558,11 +700,6 @@ watch(
   },
 );
 
-function toggleShowMore(tabName: string) {
-  showMore[tabName] = !showMore[tabName];
-}
-
-// 重置表单数据
 function resetFormData() {
   ruleuuid.value = uuidv4();
   formData.value = { ...copyObj(RULE) };
@@ -592,8 +729,10 @@ function getDetail(id: string) {
       if (res.code === 0) {
         formData.value = JSON.parse(res.data.rule_content_json);
         formData.value.rule_status = res.data.rule_status;
+        // 老规则没有动作字段，补默认值（拦截），保证界面正常显示且行为不变
+        if (!formData.value.rule_action) formData.value.rule_action = 'deny';
+        if (!formData.value.rule_action_skips) formData.value.rule_action_skips = [];
         ruleDetail.value = res.data;
-        // 同步编辑器内容
         formCodemirrorContent.value = formData.value.rule_content || res.data.rule_content || '';
       }
     })
@@ -607,7 +746,6 @@ const onSubmit: FormProps['onSubmit'] = ({ firstError }) => {
   }
   formData.value.rule_base.salience = parseInt(formData.value.rule_base.salience);
   formData.value.rule_content = formCodemirrorContent.value;
-  // 使用正则替换 rule_content 中的 salience 值
   formData.value.rule_content = formData.value.rule_content.replace(/salience\s+\d+/g, `salience ${formData.value.rule_base.salience}`);
 
   if (op_type.value === 'add') {
@@ -702,6 +840,36 @@ function changeManualRule(e: any) {
   }
 }
 
+// 把字符串转义成 GRL 双引号字面量内容，剔除换行/控制字符（与后端 model.EscapeGrlString 一致）
+function escapeGrlString(s: any): string {
+  if (s == null) return '';
+  let out = '';
+  for (const ch of String(s)) {
+    const code = ch.charCodeAt(0);
+    if (ch === '\\') out += '\\\\';
+    else if (ch === '"') out += '\\"';
+    else if (ch === '\r' || ch === '\n' || ch === '\t') {
+      /* 丢弃 */
+    } else if (code < 0x20 || code === 0x7f) {
+      /* 丢弃控制字符 */
+    } else out += ch;
+  }
+  return out;
+}
+
+// 根据界面选择生成 then 块里的动作语句
+function genRuleActionStmt(): string {
+  const action = formData.value.rule_action || 'deny';
+  if (action === 'log') return 'RF.Log();';
+  if (action === 'allow') {
+    const skips = (formData.value.rule_action_skips || []).map((m: any) => String(m).toUpperCase());
+    if (skips.indexOf('ALL') >= 0) return 'RF.AllowAll();';
+    if (skips.length === 0) return 'RF.Allow();';
+    return `RF.Allow(${skips.map((m: string) => `"${m}"`).join(', ')});`;
+  }
+  return 'RF.Deny();';
+}
+
 function setRuleContentByMode() {
   const rulename = ruleuuid.value.replace(/-/g, '');
   const ruleremark = formData.value.rule_base.rule_name;
@@ -724,18 +892,36 @@ function setRuleContentByMode() {
       bean = 'BODY';
       break;
   }
-  const rule_condition = `MF.${bean}.Contains("${fromLogContentStr.value}")==true`;
-  const rule_action = '';
-  const str = `rule R${rulename} "${ruleremark}" salience ${rule_salience} {
+  // fromLogContentStr 来自攻击日志，是攻击者可控的原文，拼进规则前必须转义（真正的防线在后端，这里是第一道）
+  const safeContent = escapeGrlString(fromLogContentStr.value);
+  const safeRemark = escapeGrlString(ruleremark);
+  const rule_condition = `MF.${bean}.Contains("${safeContent}")==true`;
+  const rule_action = genRuleActionStmt();
+  const str = `rule R${rulename} "${safeRemark}" salience ${rule_salience} {
             when
                 ${rule_condition}
             then
                 ${rule_action}
-        		Retract("R${rulename}");
         } `;
   nextTick(() => {
     formCodemirrorContent.value = str;
   });
+}
+
+// 动作变更后刷新预览
+function onRuleActionChange() {
+  if (formData.value.rule_action !== 'allow') {
+    formData.value.rule_action_skips = [];
+  }
+  onFormChange();
+}
+
+// 跳过模块变更：选了"全部"就清掉其他选项
+function onRuleActionSkipsChange(val: any) {
+  if (Array.isArray(val) && val.length > 1 && val.indexOf('ALL') >= 0) {
+    formData.value.rule_action_skips = ['ALL'];
+  }
+  onFormChange();
 }
 
 function handleJumpOnlineUrl() {
@@ -744,14 +930,10 @@ function handleJumpOnlineUrl() {
 
 // 跳转到攻击日志（用于从日志创建规则）
 function handleJumpAttackLogOperation() {
-  router.push({
-    path: '/waf/wafattacklog',
-    query: { sourcePage: 'AddRule' },
-  });
+  router.push({ path: '/waf/wafattacklog', query: { sourcePage: 'AddRule' } });
 }
 
 function onAttrChange(item: Record<string, any>) {
-  // 依据选择的范围，自动调整值类型
   if ((item.attr || '').toUpperCase() === 'PORT') {
     item.attr_type = 'int';
   } else {
@@ -761,22 +943,21 @@ function onAttrChange(item: Record<string, any>) {
 }
 
 function onFormChange() {
-  // 编排模式下任意字段变更后，刷新预览
   fetchRulePreview();
 }
 
 function buildPreviewPayload() {
-  // 统一构造 RuleJson（与后端 RuleInfo JSON 结构一致）
   const ruleJsonObj = {
     is_manual_rule: formData.value.is_manual_rule,
     rule_content: formData.value.rule_content,
+    rule_action: formData.value.rule_action || 'deny',
+    rule_action_skips: formData.value.rule_action_skips || [],
     rule_base: formData.value.rule_base,
     rule_condition: formData.value.rule_condition,
     rule_do_assignment: formData.value.rule_do_assignment,
     rule_do_method: formData.value.rule_do_method,
   };
   let ruleCode: string;
-  // 编辑情况下需要把 code 也传进去
   if (ruleDetail.value && ruleDetail.value.rule_code) {
     ruleCode = ruleDetail.value.rule_code;
   } else {
@@ -810,10 +991,182 @@ function onAttrJudgeChange(item: Record<string, any>) {
   if (!isFunc) {
     item.attr_val2 = '';
   } else if (item.attr_val2 !== 'true' && item.attr_val2 !== 'false') {
-    // 切换为函数时，默认置为 true
     item.attr_val2 = 'true';
   }
   onFormChange();
+}
+
+// 动作标签配色：拦截红/放行绿/仅记录蓝
+function ruleActionTheme(action: string) {
+  switch (action) {
+    case 'allow':
+      return 'success';
+    case 'log':
+      return 'primary';
+    default:
+      return 'danger';
+  }
+}
+function ruleActionLabel(action: string) {
+  switch (action) {
+    case 'allow':
+      return t('page.rule.detail.rule_action_allow');
+    case 'log':
+      return t('page.rule.detail.rule_action_log');
+    default:
+      return t('page.rule.detail.rule_action_deny');
+  }
+}
+
+// 打开 AI 提示词弹窗（提示词唯一来源在后端，按当前界面语言取用）
+async function openAiPrompt() {
+  aiPromptDialogVisible.value = true;
+  try {
+    const res = await wafRuleAiPromptApi({ lang: locale.value });
+    if (res.code === 0 && res.data) {
+      aiPromptText.value = res.data;
+    } else {
+      MessagePlugin.warning(res.msg || t('page.rule.detail.ai_gen_fail'));
+    }
+  } catch (e) {
+    console.log(e);
+    MessagePlugin.error(t('page.rule.detail.ai_gen_fail'));
+  }
+}
+function copyAiPrompt() {
+  copyExample(aiPromptText.value);
+}
+
+// 预设服务商说明（按界面语言）
+function gptPresetDesc(p: Record<string, any>) {
+  const en = String(locale.value || '').toLowerCase().indexOf('en') === 0;
+  return en ? p.en : p.zh;
+}
+
+// 打开 GPT 参数设置弹窗并拉取当前配置（密钥不回传明文）
+async function openGptConfig() {
+  gptConfigDialogVisible.value = true;
+  gptConfigLoading.value = true;
+  gptConfig.gpt_token = '';
+  try {
+    const res = await wafGptConfigGetApi();
+    if (res.code === 0 && res.data) {
+      gptConfig.gpt_url = res.data.gpt_url || '';
+      gptConfig.gpt_model = res.data.gpt_model || '';
+      gptConfig.has_token = !!res.data.has_token;
+    }
+  } catch (e) {
+    console.log(e);
+  } finally {
+    gptConfigLoading.value = false;
+  }
+}
+
+// 应用预设：填 url + 选定/默认模型
+function applyGptPreset(p: Record<string, any>, model?: string) {
+  gptConfig.gpt_url = p.url;
+  gptConfig.gpt_model = model || (p.models && p.models[0]) || '';
+}
+
+// 保存 GPT 参数（token 留空表示保留原密钥）
+async function saveGptConfig() {
+  if (!gptConfig.gpt_url || !gptConfig.gpt_model) {
+    MessagePlugin.warning(t('page.rule.detail.gpt_url_model_required'));
+    return;
+  }
+  gptConfigSaving.value = true;
+  try {
+    const res = await wafGptConfigSaveApi({
+      gpt_url: gptConfig.gpt_url.trim(),
+      gpt_model: gptConfig.gpt_model.trim(),
+      gpt_token: (gptConfig.gpt_token || '').trim(),
+    });
+    if (res.code === 0) {
+      MessagePlugin.success(t('page.rule.detail.gpt_save_ok'));
+      if ((gptConfig.gpt_token || '').trim()) gptConfig.has_token = true;
+      gptConfig.gpt_token = '';
+      gptConfigDialogVisible.value = false;
+    } else {
+      MessagePlugin.warning(res.msg || t('page.rule.detail.gpt_save_fail'));
+    }
+  } catch (e) {
+    console.log(e);
+    MessagePlugin.error(t('page.rule.detail.gpt_save_fail'));
+  } finally {
+    gptConfigSaving.value = false;
+  }
+}
+
+// 调用后台 AI 生成规则（后端已做校验/修复闭环）
+async function onAiGenRule() {
+  const intent = (aiGenIntent.value || '').trim();
+  if (!intent) {
+    MessagePlugin.warning(t('page.rule.detail.ai_gen_empty'));
+    return;
+  }
+  aiGenLoading.value = true;
+  aiGenResult.value = null;
+  try {
+    const res = await wafRuleAiGenApi({
+      intent,
+      lang: locale.value,
+      host_code: formData.value.rule_base.rule_domain_code || '',
+    });
+    if (res.code === 0 && res.data) {
+      aiGenResult.value = res.data;
+    } else {
+      MessagePlugin.warning(res.msg || t('page.rule.detail.ai_gen_fail'));
+    }
+  } catch (e) {
+    console.log(e);
+    MessagePlugin.error(t('page.rule.detail.ai_gen_fail'));
+  } finally {
+    aiGenLoading.value = false;
+  }
+}
+
+// 把 AI 生成的规则应用到编辑器（复用示例应用逻辑）
+function applyAiGenRule() {
+  if (!aiGenResult.value || !aiGenResult.value.rule_content) return;
+  applyExample({ code: aiGenResult.value.rule_content, multi: false });
+}
+
+// 复制示例代码到剪贴板
+function copyExample(code: string) {
+  const ok = () => MessagePlugin.success(t('page.rule.detail.example_copied'));
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(code).then(ok).catch(() => fallbackCopy(code, ok));
+  } else {
+    fallbackCopy(code, ok);
+  }
+}
+function fallbackCopy(text: string, ok: () => void) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    ok();
+  } catch (e) {
+    MessagePlugin.error(t('page.rule.detail.example_copy_fail'));
+  }
+  document.body.removeChild(ta);
+}
+
+// 把示例应用到手工代码编辑器（自动把规则名替换成当前规则的唯一码）
+function applyExample(ex: Record<string, any>) {
+  if (ex.multi) {
+    MessagePlugin.warning(t('page.rule.detail.example_multi_tip'));
+    return;
+  }
+  const realname = ruleuuid.value.replace(/-/g, '');
+  const applied = ex.code.replace(/rule\s+R[A-Za-z0-9]+/, `rule R${realname}`);
+  formData.value.rule_content = applied;
+  formCodemirrorContent.value = applied;
+  MessagePlugin.success(t('page.rule.detail.example_applied'));
 }
 
 // 测试规则相关方法
@@ -837,6 +1190,9 @@ async function onConfirmTest() {
       testResult.value = {
         is_match: res.data.is_match,
         matched_rules: res.data.matched_rules || [],
+        matched_rule_details: res.data.matched_rule_details || [],
+        effective_action: res.data.effective_action || '',
+        effective_skip_modules: res.data.effective_skip_modules || [],
         parsed_country: res.data.parsed_country || '',
         parsed_province: res.data.parsed_province || '',
         parsed_city: res.data.parsed_city || '',
@@ -896,6 +1252,10 @@ onMounted(() => {
   border: 1px solid var(--td-component-stroke);
   border-radius: 6px;
   overflow: hidden;
+  min-height: 500px;
+  max-height: 760px;
+  display: flex;
+  flex-direction: column;
 }
 
 .rule-example-header {
@@ -927,16 +1287,294 @@ onMounted(() => {
   overflow-x: auto;
 }
 
-/* 左右两侧容器高度一致 */
-.rule-example-container,
 .reference-container {
   min-height: 500px;
-  max-height: 700px;
+  max-height: 760px;
 }
 
-.rule-example-container :deep(.t-tabs__content),
 .reference-container :deep(.t-tabs__content) {
   overflow-y: auto;
   max-height: 600px;
+}
+
+/* 示例浏览器：工具条 */
+.example-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--td-component-stroke);
+  background-color: var(--td-bg-color-container-hover);
+}
+
+.example-view-switch {
+  margin-left: auto;
+}
+
+/* 示例浏览器：内容区（可滚动） */
+.example-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 12px 12px 24px;
+  min-height: 0;
+}
+
+.example-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.example-card {
+  border: 1px solid var(--td-component-stroke);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.example-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background-color: var(--td-bg-color-container-hover);
+  border-bottom: 1px solid var(--td-component-stroke);
+}
+
+.example-card-title {
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.example-card-ops {
+  flex: 0 0 auto;
+}
+
+.example-card-desc {
+  padding: 8px 10px 0;
+  color: var(--td-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.example-code {
+  margin: 8px 10px 10px;
+  padding: 10px;
+  background-color: var(--td-bg-color-container-hover);
+  border-radius: 4px;
+  font-family: Consolas, Monaco, 'Andale Mono', monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.example-explain {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.explain-item {
+  border-left: 3px solid var(--td-brand-color);
+  padding-left: 12px;
+}
+
+.explain-scene {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.explain-title {
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.explain-desc {
+  margin-top: 6px;
+  color: var(--td-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.explain-effect {
+  margin: 6px 0 8px;
+  color: var(--td-text-color-secondary);
+  font-size: 12px;
+}
+
+.explain-ops {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.explain-multi-tip {
+  color: var(--td-warning-color);
+  font-size: 12px;
+}
+
+.ai-prompt-tip {
+  margin-bottom: 8px;
+  color: var(--td-text-color-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ai-prompt-textarea :deep(textarea) {
+  font-family: Consolas, Monaco, 'Andale Mono', monospace;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.ai-prompt-ops {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* GPT 参数设置 */
+.ai-gen-setting {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.gpt-token-tip {
+  color: var(--td-text-color-placeholder);
+  font-size: 12px;
+  margin: 4px 0 12px 110px;
+}
+
+.gpt-preset-title {
+  font-weight: 500;
+  margin: 8px 0;
+}
+
+.gpt-preset-list {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: 6px;
+}
+
+.gpt-preset-item {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--td-component-stroke);
+}
+
+.gpt-preset-item:last-child {
+  border-bottom: none;
+}
+
+.gpt-preset-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.gpt-preset-name {
+  font-weight: 500;
+}
+
+.gpt-preset-desc {
+  color: var(--td-text-color-secondary);
+  font-size: 12px;
+}
+
+.gpt-preset-url {
+  color: var(--td-text-color-secondary);
+  font-size: 12px;
+  margin: 2px 0;
+  word-break: break-all;
+}
+
+.gpt-preset-models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.gpt-preset-model {
+  cursor: pointer;
+}
+
+.gpt-preset-ops {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 编辑器内 AI 生成规则面板 */
+.ai-gen-panel {
+  border: 1px solid var(--td-brand-color-3);
+  border-radius: 6px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.ai-gen-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: var(--td-brand-color-1);
+  border-bottom: 1px solid var(--td-brand-color-2);
+}
+
+.ai-gen-icon {
+  color: var(--td-brand-color);
+}
+
+.ai-gen-title {
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+  flex: 1 1 auto;
+}
+
+.ai-gen-body {
+  padding: 12px;
+}
+
+.ai-gen-ops {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.ai-gen-hint {
+  color: var(--td-text-color-placeholder);
+  font-size: 12px;
+}
+
+.ai-gen-result {
+  margin-top: 12px;
+  border-top: 1px dashed var(--td-component-stroke);
+  padding-top: 10px;
+}
+
+.ai-gen-result-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ai-gen-err {
+  color: var(--td-warning-color);
+  font-size: 12px;
+}
+
+.ai-gen-result-ops {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
 }
 </style>
