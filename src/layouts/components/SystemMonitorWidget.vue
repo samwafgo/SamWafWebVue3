@@ -133,14 +133,23 @@ const loading = ref(false);
 const error = ref(false);
 const isMonitorVisible = ref(false);
 
-// 运行环境：数据库(sqlite|mysql) / 缓存(memory|redis)
+// 运行环境：数据库(sqlite|mysql|postgres) / 缓存(memory|redis)
 const dbInfo = ref<Record<string, any>>({ driver: '' });
 const cacheInfo = ref<Record<string, any>>({ type: '' });
+
+// 后端 database.driver 取值 -> 展示名。
+// 不能用「不是 mysql 就当 sqlite」的兜底：新增 postgres 后会被误显示成 SQLite。
+// 未知 driver 直接原样显示，比错报一个数据库名要好。
+const DB_DRIVER_LABELS: Record<string, string> = {
+  sqlite: 'SQLite',
+  mysql: 'MySQL',
+  postgres: 'PostgreSQL',
+};
+
 const dbLabel = computed(() => {
   const d = dbInfo.value;
-  if (d.driver === 'mysql') return 'MySQL';
   if (!d.driver) return '-';
-  return 'SQLite';
+  return DB_DRIVER_LABELS[d.driver] || d.driver;
 });
 const cacheLabel = computed(() => {
   const c = cacheInfo.value;
@@ -150,9 +159,10 @@ const cacheLabel = computed(() => {
 });
 const dbDetail = computed(() => {
   const d = dbInfo.value;
-  if (d.driver === 'mysql') return d.host ? `MySQL (${d.host}:${d.port})` : 'MySQL';
   if (!d.driver) return '-';
-  return 'SQLite';
+  const name = DB_DRIVER_LABELS[d.driver] || d.driver;
+  // 服务端数据库(mysql/postgres)才有 host/port，sqlite 是本地文件
+  return d.host ? `${name} (${d.host}:${d.port})` : name;
 });
 const cacheDetail = computed(() => {
   const c = cacheInfo.value;
