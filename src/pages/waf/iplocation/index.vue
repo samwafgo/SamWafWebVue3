@@ -73,9 +73,16 @@
                         </t-select>
                         <div style="margin-top: 6px">
                           <t-tag v-if="fileExistsForV4(configForm.ipv4_source)" theme="success" size="small" variant="light"
-                            >✓ 文件已就绪</t-tag
+                            >✓ {{ t('page.iplocation.file_ready') }}</t-tag
                           >
-                          <t-tag v-else theme="warning" size="small" variant="light">⚠ 文件不存在，请先上传</t-tag>
+                          <t-tag
+                            v-else-if="builtinExistsForV4(configForm.ipv4_source)"
+                            theme="primary"
+                            size="small"
+                            variant="light"
+                            >✓ {{ t('page.iplocation.builtin_ready') }}</t-tag
+                          >
+                          <t-tag v-else theme="warning" size="small" variant="light">⚠ {{ t('page.iplocation.file_missing') }}</t-tag>
                         </div>
                       </div>
                     </t-form-item>
@@ -91,10 +98,15 @@
                     <t-divider></t-divider>
                     <div class="iplocation-status-box">
                       <p><strong>{{ t('page.iplocation.current_status') }}:</strong></p>
-                      <p>{{ t('page.iplocation.source') }}: {{ status.ipv4_source || '-' }}</p>
+                      <p>
+                        {{ t('page.iplocation.source') }}: {{ status.ipv4_source || '-' }}
+                        <t-tag v-if="status.ipv4_builtin" theme="primary" size="small" variant="light" style="margin-left: 6px">{{
+                          t('page.iplocation.builtin_tag')
+                        }}</t-tag>
+                      </p>
                       <p v-if="status.ipv4_source === 'ip2region'">{{ t('page.iplocation.format') }}: {{ status.ipv4_format || '-' }}</p>
                       <p>{{ t('page.iplocation.file_size') }}: {{ formatFileSize(status.ipv4_file_size) }}</p>
-                      <p>{{ t('page.iplocation.file_create_time') }}: {{ status.ipv4_create_time || '-' }}</p>
+                      <p v-if="!status.ipv4_builtin">{{ t('page.iplocation.file_create_time') }}: {{ status.ipv4_create_time || '-' }}</p>
                       <p>{{ t('page.iplocation.load_time') }}: {{ status.ipv4_load_time || '-' }}</p>
                     </div>
                   </t-form>
@@ -114,9 +126,16 @@
                         </t-select>
                         <div style="margin-top: 6px">
                           <t-tag v-if="fileExistsForV6(configForm.ipv6_source)" theme="success" size="small" variant="light"
-                            >✓ 文件已就绪</t-tag
+                            >✓ {{ t('page.iplocation.file_ready') }}</t-tag
                           >
-                          <t-tag v-else theme="warning" size="small" variant="light">⚠ 文件不存在，请先上传</t-tag>
+                          <t-tag
+                            v-else-if="builtinExistsForV6(configForm.ipv6_source)"
+                            theme="primary"
+                            size="small"
+                            variant="light"
+                            >✓ {{ t('page.iplocation.builtin_ready') }}</t-tag
+                          >
+                          <t-tag v-else theme="warning" size="small" variant="light">⚠ {{ t('page.iplocation.file_missing') }}</t-tag>
                         </div>
                       </div>
                     </t-form-item>
@@ -132,10 +151,15 @@
                     <t-divider></t-divider>
                     <div class="iplocation-status-box">
                       <p><strong>{{ t('page.iplocation.current_status') }}:</strong></p>
-                      <p>{{ t('page.iplocation.source') }}: {{ status.ipv6_source || '-' }}</p>
+                      <p>
+                        {{ t('page.iplocation.source') }}: {{ status.ipv6_source || '-' }}
+                        <t-tag v-if="status.ipv6_builtin" theme="primary" size="small" variant="light" style="margin-left: 6px">{{
+                          t('page.iplocation.builtin_tag')
+                        }}</t-tag>
+                      </p>
                       <p v-if="status.ipv6_source === 'ip2region'">{{ t('page.iplocation.format') }}: {{ status.ipv6_format || '-' }}</p>
                       <p>{{ t('page.iplocation.file_size') }}: {{ formatFileSize(status.ipv6_file_size) }}</p>
-                      <p>{{ t('page.iplocation.file_create_time') }}: {{ status.ipv6_create_time || '-' }}</p>
+                      <p v-if="!status.ipv6_builtin">{{ t('page.iplocation.file_create_time') }}: {{ status.ipv6_create_time || '-' }}</p>
                       <p>{{ t('page.iplocation.load_time') }}: {{ status.ipv6_load_time || '-' }}</p>
                     </div>
                   </t-form>
@@ -243,12 +267,22 @@ const status = ref<Record<string, any>>({
   ipv4_file_size: 0,
   ipv4_load_time: '',
   ipv4_create_time: '',
+  ipv4_builtin: false,
   ipv6_source: '',
   ipv6_format: '',
   ipv6_file_size: 0,
   ipv6_load_time: '',
   ipv6_create_time: '',
+  ipv6_builtin: false,
+  // 磁盘上是否有用户上传的文件
   file_exists: {
+    ip2region_v4: false,
+    ip2region_v6: false,
+    geolite2: false,
+    ipdb: false,
+  },
+  // 是否有内置数据兜底（随程序发布，无需上传）
+  builtin_exists: {
     ip2region_v4: false,
     ip2region_v6: false,
     geolite2: false,
@@ -340,6 +374,7 @@ async function loadConfig() {
   }
 }
 
+// 该来源对应的文件是否已上传到磁盘
 function fileExistsForV4(source: string) {
   const fe = status.value.file_exists;
   if (!fe) return true;
@@ -355,6 +390,33 @@ function fileExistsForV6(source: string) {
   if (source === 'geolite2') return fe.geolite2;
   if (source === 'ipdb') return fe.ipdb;
   return true;
+}
+
+// 未上传文件时，该来源是否有内置数据兜底（全新安装即属此情况）
+function builtinExistsForV4(source: string) {
+  const be = status.value.builtin_exists;
+  if (!be) return false;
+  if (source === 'ip2region') return be.ip2region_v4;
+  if (source === 'ipdb') return be.ipdb;
+  return false;
+}
+
+function builtinExistsForV6(source: string) {
+  const be = status.value.builtin_exists;
+  if (!be) return false;
+  if (source === 'ip2region') return be.ip2region_v6;
+  if (source === 'geolite2') return be.geolite2;
+  if (source === 'ipdb') return be.ipdb;
+  return false;
+}
+
+// 数据可用 = 已上传文件 或 有内置数据
+function sourceReadyForV4(source: string) {
+  return fileExistsForV4(source) || builtinExistsForV4(source);
+}
+
+function sourceReadyForV6(source: string) {
+  return fileExistsForV6(source) || builtinExistsForV6(source);
 }
 
 async function doSaveConfig() {
@@ -377,8 +439,8 @@ async function doSaveConfig() {
 }
 
 function handleSaveConfig() {
-  const v4Ok = fileExistsForV4(configForm.ipv4_source);
-  const v6Ok = fileExistsForV6(configForm.ipv6_source);
+  const v4Ok = sourceReadyForV4(configForm.ipv4_source);
+  const v6Ok = sourceReadyForV6(configForm.ipv6_source);
   if (!v4Ok || !v6Ok) {
     const missing = [];
     if (!v4Ok) missing.push('IPv4');
