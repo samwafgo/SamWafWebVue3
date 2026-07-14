@@ -107,3 +107,12 @@ export function wafFirewallIPBlockStatisticsApi(params: Record<string, any>) {
     params,
   });
 }
+
+/** 获取当前环境的系统防火墙能力 */
+export function wafFirewallIPBlockCapabilityApi(params: Record<string, any>) {
+  return request({
+    url: '/firewall/ipblock/capability',
+    method: 'get',
+    params,
+  });
+}

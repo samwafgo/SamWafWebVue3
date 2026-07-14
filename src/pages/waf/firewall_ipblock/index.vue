@@ -3,12 +3,14 @@
     <t-card class="list-card-container">
       <t-row justify="space-between">
         <div class="left-operation-container">
-          <t-button @click="handleAdd">{{ t('page.firewall_ipblock.button_add_ip') }}</t-button>
-          <t-button @click="handleBatchAdd">{{ t('page.firewall_ipblock.button_batch_add') }}</t-button>
+          <t-button :disabled="!fwCapability.available" @click="handleAdd">{{ t('page.firewall_ipblock.button_add_ip') }}</t-button>
+          <t-button :disabled="!fwCapability.available" @click="handleBatchAdd">
+            {{ t('page.firewall_ipblock.button_batch_add') }}
+          </t-button>
           <t-button theme="danger" variant="outline" :disabled="selectedRowKeys.length === 0" @click="handleBatchDelete">
             {{ t('page.firewall_ipblock.button_batch_delete') }}
           </t-button>
-          <t-button theme="success" variant="outline" @click="handleSync">
+          <t-button theme="success" variant="outline" :disabled="!fwCapability.available" @click="handleSync">
             {{ t('page.firewall_ipblock.button_sync') }}
           </t-button>
           <t-button theme="warning" variant="outline" @click="handleClearExpired">
@@ -86,6 +88,15 @@
         </t-col>
       </t-row>
 
+      <t-alert
+        v-if="!fwCapability.available"
+        theme="warning"
+        :message="t('page.firewall_ipblock.unavailable_alert') + fwCapability.message"
+      >
+        <template #operation>
+          <span @click="handleJumpOnlineUrl">{{ t('common.online_document') }}</span>
+        </template>
+      </t-alert>
       <t-alert theme="info" :message="t('page.firewall_ipblock.alert_message')" close>
         <template #operation>
           <span @click="handleJumpOnlineUrl">{{ t('common.online_document') }}</span>
@@ -138,7 +149,11 @@
           </template>
 
           <template #op="slotProps">
-            <a v-if="slotProps.row.status === 'inactive'" class="t-button-link" @click="handleClickEnable(slotProps)">
+            <a
+              v-if="slotProps.row.status === 'inactive' && fwCapability.available"
+              class="t-button-link"
+              @click="handleClickEnable(slotProps)"
+            >
               {{ t('page.firewall_ipblock.enable') }}
             </a>
             <a v-if="slotProps.row.status === 'active'" class="t-button-link" @click="handleClickDisable(slotProps)">
@@ -312,6 +327,7 @@ import {
   wafFirewallIPBlockSyncApi,
   wafFirewallIPBlockClearExpiredApi,
   wafFirewallIPBlockStatisticsApi,
+  wafFirewallIPBlockCapabilityApi,
 } from '@/apis/firewall_ipblock';
 
 const INITIAL_DATA = {
@@ -358,6 +374,8 @@ const dataLoading = ref(false);
 const data = ref<Record<string, any>[]>([]);
 const selectedRowKeys = ref<(string | number)[]>([]);
 const statistics = ref({ total: 0, active: 0, inactive: 0, expired: 0 });
+// 当前环境是否具备系统防火墙封禁能力（容器内未装 iptables / 缺少权限时为 false）
+const fwCapability = ref({ available: true, message: '' });
 const rowKey = 'id';
 
 const columns = computed<TableProps['columns']>(() => [
@@ -436,6 +454,18 @@ function getStatistics() {
     .then((res) => {
       if (res.code === 0) {
         statistics.value = res.data;
+      }
+    })
+    .catch((e: Error) => {
+      console.log(e);
+    });
+}
+
+function getCapability() {
+  wafFirewallIPBlockCapabilityApi({})
+    .then((res) => {
+      if (res.code === 0) {
+        fwCapability.value = res.data;
       }
     })
     .catch((e: Error) => {
@@ -723,6 +753,7 @@ function handleJumpOnlineUrl() {
 }
 
 onMounted(() => {
+  getCapability();
   loadHostList().then(() => {
     getList();
     getStatistics();
