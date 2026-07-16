@@ -79,9 +79,16 @@
           </div>
         </t-form-item>
         <t-form-item :label="t('page.sslorder.label_apply_method')" name="apply_method">
-          <t-select v-model="formData.apply_method" clearable :style="{ width: '480px' }">
+          <t-select v-model="formData.apply_method" clearable :style="{ width: '480px' }" @change="handleApplyMethodChange">
             <t-option v-for="item in sslorderApplyMethodOptions" :key="item.value" :value="item.value" :label="item.label" />
           </t-select>
+          <div
+            v-if="formData.apply_method === 'http01' && formData.host_code && !addHost80Ok"
+            class="form-item-tips"
+            style="color: #e34d59"
+          >
+            {{ t('page.sslorder.http01_no_80_tips') }}
+          </div>
         </t-form-item>
         <t-form-item v-if="formData.apply_method === 'dns01'" :label="t('page.sslorder.label_apply_dns')" name="apply_dns">
           <t-select v-model="formData.apply_dns" clearable :style="{ width: '480px' }" @change="handleDnsChange">
@@ -155,7 +162,12 @@
     <t-dialog v-model:visible="editFormVisible" :header="t('common.renew')" :width="770" :footer="false">
       <t-form :data="formEditData" :rules="rules" :label-width="240" @submit="onSubmitEdit">
         <t-form-item :label="t('page.sslorder.label_website')" name="host_code">
-          <t-select v-model="formEditData.host_code" clearable :style="{ width: '480px' }">
+          <t-select
+            v-model="formEditData.host_code"
+            clearable
+            :style="{ width: '480px' }"
+            @change="(v: any) => changeHostCodeEdit(String(v ?? ''))"
+          >
             <t-option v-for="(item, index) in host_dic" :key="index" :value="index" :label="item">
               {{ item }}
             </t-option>
@@ -172,9 +184,16 @@
           </div>
         </t-form-item>
         <t-form-item :label="t('page.sslorder.label_apply_method')" name="apply_method">
-          <t-select v-model="formEditData.apply_method" clearable :style="{ width: '480px' }">
+          <t-select v-model="formEditData.apply_method" clearable :style="{ width: '480px' }" @change="handleApplyMethodChangeEdit">
             <t-option v-for="item in sslorderApplyMethodOptions" :key="item.value" :value="item.value" :label="item.label" />
           </t-select>
+          <div
+            v-if="formEditData.apply_method === 'http01' && formEditData.host_code && !editHost80Ok"
+            class="form-item-tips"
+            style="color: #e34d59"
+          >
+            {{ t('page.sslorder.http01_no_80_tips') }}
+          </div>
         </t-form-item>
         <t-form-item v-if="formEditData.apply_method === 'dns01'" :label="t('page.sslorder.label_apply_dns')" name="apply_dns">
           <t-select v-model="formEditData.apply_dns" clearable :style="{ width: '480px' }" @change="handleDnsChange">
@@ -365,7 +384,7 @@ import { DialogPlugin, MessagePlugin, type FormProps, type PageInfo, type TableP
 import { getOnlineUrl } from '@/utils/usuallytool';
 import { sslOrderAddApi, sslOrderDelApi, sslOrderEditApi, sslOrderListApi } from '@/apis/sslorder';
 import { wafPrivateInfoListApi, wafPrivateInfoEditApi, wafPrivateInfoAddApi } from '@/apis/private_info';
-import { allhost, alldomainbyhostcode } from '@/apis/host';
+import { allhost, alldomainbyhostcode, getHostDetail } from '@/apis/host';
 import { get_detail_by_item_api, edit_system_config_api } from '@/apis/systemconfig';
 import { wafPrivateGroupListByBelongCloudApi, wafPrivateGroupAddApi } from '@/apis/private_group';
 import { wafCaServerInfoListApi, wafCaServerInfoDelApi, wafCaServerInfoEditApi, wafCaServerInfoAddApi } from '@/apis/ca_server_info';
@@ -450,6 +469,9 @@ const pagination = reactive({ total: 0, current: 1, pageSize: 10 });
 const searchformData = reactive({ apply_domain: '', host_code: '' });
 const deleteIdx = ref<string | number>(-1);
 const host_dic = ref<Record<string, string>>({});
+// 文件验证(http01)时，所选主机是否具备80端口（主端口或绑定更多端口）
+const addHost80Ok = ref(true);
+const editHost80Ok = ref(true);
 
 // 证书文件验证方式设置
 const sslHttpCheckDialogVisible = ref(false);
@@ -853,7 +875,80 @@ function getPrivateList() {
     });
 }
 
+// 检测所选主机是否具备80端口（主端口 或 绑定更多端口，逗号分隔），与后端 check80Port 保持一致
+function evalHost80(hostCode: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!hostCode) {
+      resolve(true);
+      return;
+    }
+    getHostDetail({ CODE: hostCode })
+      .then((res) => {
+        if (res.code === 0 && res.data) {
+          const { port } = res.data;
+          const morePort = res.data.bind_more_port || '';
+          const has80 =
+            port === 80 ||
+            String(morePort)
+              .split(',')
+              .map((p: string) => p.trim())
+              .indexOf('80') !== -1;
+          resolve(has80);
+        } else {
+          resolve(true); // 拿不到详情时不打扰用户，交由后端提交时兜底校验
+        }
+      })
+      .catch((e) => {
+        console.log(e);
+        resolve(true);
+      });
+  });
+}
+
+// 新建：所选主机的80端口检测（仅驱动右侧静态提示，不弹窗）
+function checkAddHost80() {
+  evalHost80(formData.value.host_code).then((ok) => {
+    addHost80Ok.value = ok;
+  });
+}
+
+// 续期：所选主机的80端口检测（仅驱动右侧静态提示，不弹窗）
+function checkEditHost80() {
+  evalHost80(formEditData.value.host_code).then((ok) => {
+    editHost80Ok.value = ok;
+  });
+}
+
+// 新建：申请方式变更
+function handleApplyMethodChange(value: any) {
+  if (value === 'http01') {
+    checkAddHost80();
+  }
+}
+
+// 续期：申请方式变更
+function handleApplyMethodChangeEdit(value: any) {
+  if (value === 'http01') {
+    checkEditHost80();
+  }
+}
+
+// 续期：主机变更
+function changeHostCodeEdit(hostCode: string) {
+  if (hostCode) {
+    checkEditHost80();
+  } else {
+    editHost80Ok.value = true;
+  }
+}
+
 function changeHostCode(hostCode: string) {
+  // 同步检测该主机是否具备80端口（供文件验证方式提示）
+  if (hostCode) {
+    checkAddHost80();
+  } else {
+    addHost80Ok.value = true;
+  }
   if (hostCode !== '') {
     alldomainbyhostcode({ code: hostCode })
       .then((res) => {
@@ -969,6 +1064,11 @@ function handleClickEdit(slotProps: { row: Record<string, any> }) {
   };
   if (row.apply_method === 'dns01' && row.apply_dns) {
     getPrivateGroupList(row.apply_dns);
+  }
+  // 文件验证方式：检测该主机是否具备80端口
+  editHost80Ok.value = true;
+  if (row.apply_method === 'http01' && row.host_code) {
+    checkEditHost80();
   }
   editFormVisible.value = true;
 }

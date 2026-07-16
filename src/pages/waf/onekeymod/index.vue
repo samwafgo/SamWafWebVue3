@@ -1,6 +1,8 @@
 <template>
   <div>
     <t-card class="list-card-container">
+      <t-tabs v-model="activeTab">
+        <t-tab-panel value="port" :label="t('page.one_key_mod.tab_port_modify')">
       <t-row justify="space-between">
         <div class="left-operation-container">
           <t-form :label-width="300" colon layout="inline" :style="{ marginBottom: '8px' }">
@@ -51,6 +53,11 @@
           </template>
         </t-table>
       </div>
+        </t-tab-panel>
+        <t-tab-panel value="import" :label="t('page.one_key_mod.tab_import_nginx')">
+          <import-nginx />
+        </t-tab-panel>
+      </t-tabs>
     </t-card>
 
     <t-dialog v-model:visible="editFormVisible" :header="t('common.details')" :width="680" :footer="false">
@@ -104,6 +111,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next';
 import type { PageInfo, TableProps } from 'tdesign-vue-next';
@@ -116,9 +124,12 @@ import {
   wafRestoreOneKeyModApi,
 } from '@/apis/onekeymod';
 import { getOnlineUrl } from '@/utils/usuallytool';
+import ImportNginx from './components/ImportNginx.vue';
 
 const { t } = useI18n();
+const route = useRoute();
 
+const activeTab = ref('port');
 const defaultFilePath = ref('/www/server/panel/vhost/nginx');
 const editFormVisible = ref(false);
 const confirmVisible = ref(false);
@@ -157,6 +168,9 @@ const confirmBody = computed(() => {
 });
 
 onMounted(() => {
+  if (route.query.tab === 'import') {
+    activeTab.value = 'import';
+  }
   getList('');
 });
 

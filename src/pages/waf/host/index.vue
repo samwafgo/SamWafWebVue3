@@ -8,6 +8,7 @@
           <t-button variant="base" theme="default" @click="HandleImportExcel()">{{ t('page.host.import_data') }}</t-button>
           <t-button variant="base" theme="warning" @click="handleModifyAllGuardStatus()">{{ t('page.host.modify_all_guard_status') }}</t-button>
           <t-button variant="base" theme="primary" @click="handleBatchCopyConfig()">{{ t('page.host.batch_copy_config') }}</t-button>
+          <t-button variant="base" theme="success" @click="handleImportNginx()">{{ t('page.host.import_nginx') }}</t-button>
         </div>
         <div class="right-operation-container">
           <t-form :data="searchformData" :label-width="80" colon layout="inline" :style="{ marginBottom: '8px' }">
@@ -347,7 +348,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin, LoadingPlugin, type TableProps, type PageInfo } from 'tdesign-vue-next';
 import { LinkIcon } from 'tdesign-icons-vue-next';
@@ -378,6 +379,7 @@ import { INITIAL_DATA } from './constants';
 
 const { t } = useI18n();
 const route = useRoute();
+const router = useRouter();
 
 // 批量复制配置相关数据
 const batchCopyVisible = ref(false);
@@ -707,6 +709,11 @@ function handleClickEdit(e: { row: Record<string, any> }) {
 function handleAddHost() {
   formData.value = { ...formData.value, code: uuidv4() };
   addFormVisible.value = true;
+}
+
+// 跳转到一键修改页的“批量导入网址”标签
+function handleImportNginx() {
+  router.push({ name: 'OneKeyMod', query: { tab: 'import' } });
 }
 
 function onSubmit(payload: { result: Record<string, any> }) {
