@@ -116,6 +116,15 @@
                 </div>
               </div>
             </t-form-item>
+
+            <t-form-item v-if="formData.ssl == '1'" :label="t('page.host.disable_http2.label')" name="disable_http2">
+              <t-tooltip :content="t('page.host.disable_http2.tips')" placement="top" :overlay-style="{ width: '260px' }" show-arrow>
+                <t-radio-group v-model="formData.disable_http2">
+                  <t-radio value="0">{{ t('page.host.disable_http2.enable') }}</t-radio>
+                  <t-radio value="1">{{ t('page.host.disable_http2.disable') }}</t-radio>
+                </t-radio-group>
+              </t-tooltip>
+            </t-form-item>
             <t-form-item
               v-if="formData.ssl == '1' && (isEdit || formData.ssl_config_mode === 'existing')"
               :label="t('page.host.certfile')"
@@ -689,6 +698,7 @@ watch(
     fd.is_enable_load_balance = fd.is_enable_load_balance != null ? fd.is_enable_load_balance.toString() : '0';
     fd.load_balance_stage = fd.load_balance_stage != null ? fd.load_balance_stage.toString() : '1';
     fd.auto_jump_https = fd.auto_jump_https != null ? fd.auto_jump_https.toString() : '0';
+    fd.disable_http2 = fd.disable_http2 != null ? fd.disable_http2.toString() : '0';
     fd.is_trans_back_domain = fd.is_trans_back_domain != null ? fd.is_trans_back_domain.toString() : '0';
     fd.is_enable_http_auth_base = fd.is_enable_http_auth_base != null ? fd.is_enable_http_auth_base.toString() : '0';
     fd.http_auth_base_type = fd.http_auth_base_type != null ? fd.http_auth_base_type : 'authorization';
@@ -1174,6 +1184,7 @@ const onSubmit: FormProps['onSubmit'] = ({ validateResult, firstError }) => {
     postdata.is_enable_load_balance = Number(postdata.is_enable_load_balance);
     postdata.load_balance_stage = Number(postdata.load_balance_stage);
     postdata.auto_jump_https = Number(postdata.auto_jump_https);
+    postdata.disable_http2 = Number(postdata.disable_http2);
     postdata.is_trans_back_domain = Number(postdata.is_trans_back_domain);
     postdata.is_enable_http_auth_base = Number(postdata.is_enable_http_auth_base);
     postdata.response_time_out = Number(postdata.response_time_out);
