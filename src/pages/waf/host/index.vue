@@ -153,7 +153,7 @@
     </t-card>
 
     <!-- New WebSite Dialog -->
-    <t-dialog v-model:visible="addFormVisible" :width="750" :footer="false">
+    <t-dialog v-model:visible="addFormVisible" :width="hostFormDialogWidth" :footer="false">
       <template #header>
         {{ t('common.new') }}
         <t-link theme="primary" :href="hostAddUrl" target="_blank">
@@ -161,12 +161,12 @@
           {{ t('common.online_document') }}
         </t-link>
       </template>
-      <host-form :value="formData" :select-can-filter="selectCanFilter" @close="onClickCloseBtn" @submit="onSubmit" />
+      <host-form :value="formData" :select-can-filter="selectCanFilter" @close="onClickCloseBtn" @submit="onSubmit" @tab-placement-change="onHostTabPlacementChange" />
     </t-dialog>
 
     <!-- Edit WebSite Dialog -->
-    <t-dialog v-model:visible="editFormVisible" :header="t('common.edit')" :width="750" :footer="false">
-      <host-form :value="formEditData" :select-can-filter="selectCanFilter" :is-edit="true" @close="onClickCloseEditBtn" @submit="onSubmitEdit" />
+    <t-dialog v-model:visible="editFormVisible" :header="t('common.edit')" :width="hostFormDialogWidth" :footer="false">
+      <host-form :value="formEditData" :select-can-filter="selectCanFilter" :is-edit="true" @close="onClickCloseEditBtn" @submit="onSubmitEdit" @tab-placement-change="onHostTabPlacementChange" />
     </t-dialog>
 
     <t-dialog
@@ -414,6 +414,12 @@ const fileHeader = reactive<Record<string, string>>({
 
 const addFormVisible = ref(false);
 const editFormVisible = ref(false);
+// 网站表单弹窗宽度：Tab 竖向布局(left)需要更宽，横向(top)保持 750
+const hostFormDialogWidth = ref(localStorage.getItem('samwaf_host_tab_placement') === 'top' ? 750 : 920);
+// HostForm 内切换 Tab 布局时联动调整弹窗宽度
+const onHostTabPlacementChange = (placement: string) => {
+  hostFormDialogWidth.value = placement === 'top' ? 750 : 920;
+};
 const confirmVisible = ref(false);
 const sslAutoApplyVisible = ref(false);
 const ImportXlsxVisible = ref(false);

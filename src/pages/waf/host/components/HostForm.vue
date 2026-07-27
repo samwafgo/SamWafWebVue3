@@ -2,8 +2,25 @@
   <div>
     <div class="host-form">
       <t-form :data="formData" :rules="rules" :label-width="230" @submit="onSubmit">
-        <t-tabs v-model="activeTab">
-          <t-tab-panel :value="1" :label="t('page.host.tab_base')">
+        <div class="host-tabs-wrapper" :class="{ 'host-tabs-wrapper--left': tabPlacement === 'left' }">
+          <div class="tab-placement-bar">
+            <t-tooltip
+              :content="tabPlacement === 'left' ? t('page.host.tab_layout_horizontal') : t('page.host.tab_layout_vertical')"
+              placement="top"
+              show-arrow
+            >
+              <t-button variant="text" shape="square" size="small" @click="toggleTabPlacement">
+                <view-list-icon v-if="tabPlacement === 'left'" />
+                <view-column-icon v-else />
+              </t-button>
+            </t-tooltip>
+          </div>
+          <t-tabs ref="tabsRef" v-model="activeTab" :placement="tabPlacement">
+          <t-tab-panel :value="1">
+            <template #label>
+              <home-icon style="margin-right: 4px; color: #0052d9" />
+              {{ t('page.host.tab_base') }}
+            </template>
             <t-form-item :label="t('page.host.website')" name="host">
               <t-tooltip :content="t('page.host.host_tips')" placement="top" :overlay-style="{ width: '200px' }" show-arrow>
                 <t-input v-model="formData.host" :style="{ width: '480px' }" :placeholder="t('common.placeholder')" :disabled="isEdit" />
@@ -198,7 +215,10 @@
           </t-tab-panel>
 
           <t-tab-panel :value="2">
-            <template #label>{{ t('page.host.tab_more_domain') }}</template>
+            <template #label>
+              <layers-icon style="margin-right: 4px; color: #0052d9" />
+              {{ t('page.host.tab_more_domain') }}
+            </template>
             <t-form-item :label="t('page.host.more_domain')" name="bind_more_host">
               <t-tooltip :content="t('page.host.more_domain_tips')" placement="top" :overlay-style="{ width: '200px' }" show-arrow>
                 <t-textarea v-model="formData.bind_more_host" :style="{ width: '480px' }" :placeholder="t('common.placeholder')" name="bind_more_host" />
@@ -236,7 +256,10 @@
           </t-tab-panel>
 
           <t-tab-panel :value="4">
-            <template #label>{{ t('page.host.tab_other') }}</template>
+            <template #label>
+              <setting-icon style="margin-right: 4px; color: #0052d9" />
+              {{ t('page.host.tab_other') }}
+            </template>
             <!-- IP提取模式：不要用 t-tooltip 包裹整组单选，否则会拦截点击导致无法切换 -->
             <t-form-item name="ip_mode">
               <template #label>
@@ -293,7 +316,10 @@
           </t-tab-panel>
 
           <t-tab-panel :value="5">
-            <template #label>{{ t('page.host.tab_password') }}</template>
+            <template #label>
+              <user-password-icon style="margin-right: 4px; color: #0052d9" />
+              {{ t('page.host.tab_password') }}
+            </template>
             <t-form-item :label="t('page.host.is_enable_http_auth_base')" name="is_enable_http_auth_base">
               <t-tooltip :content="t('page.host.is_enable_http_auth_base_tips')" placement="top" :overlay-style="{ width: '200px' }" show-arrow>
                 <t-radio-group v-model="formData.is_enable_http_auth_base">
@@ -374,14 +400,14 @@
           </t-tab-panel>
           <t-tab-panel :value="12">
             <template #label>
-              <filter-icon style="margin-right: 4px; color: #0052d9" />
+              <arrow-up-circle-icon style="margin-right: 4px; color: #0052d9" />
               {{ t('page.host.tab_custom_headers') }}
             </template>
             <custom-headers-config :custom-headers-config="customHeadersConfigData" @update="(val: any) => (customHeadersConfigData = val)" />
           </t-tab-panel>
           <t-tab-panel :value="13">
             <template #label>
-              <filter-icon style="margin-right: 4px; color: #0052d9" />
+              <arrow-down-circle-icon style="margin-right: 4px; color: #0052d9" />
               {{ t('page.host.tab_custom_response_headers') }}
             </template>
             <custom-response-headers-config
@@ -419,7 +445,7 @@
           </t-tab-panel>
           <t-tab-panel :value="19">
             <template #label>
-              <file-paste-icon style="margin-right: 4px; color: #0052d9" />
+              <file-safety-icon style="margin-right: 4px; color: #0052d9" />
               {{ t('page.host.tab_upload_security') }}
             </template>
             <upload-security-config :upload-security-config="uploadSecurityConfigData" @update="(val: any) => (uploadSecurityConfigData = val)" />
@@ -431,7 +457,8 @@
             </template>
             <path-rule-config :prop-host-code="formData.code || ''" />
           </t-tab-panel>
-        </t-tabs>
+          </t-tabs>
+        </div>
 
         <t-form-item style="float: right; margin-top: 5px">
           <t-button variant="outline" @click="emit('close')">{{ t('common.close') }}</t-button>
@@ -450,7 +477,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin, type FormProps } from 'tdesign-vue-next';
@@ -469,6 +496,14 @@ import {
   VerifyIcon,
   HelpCircleIcon,
   JumpIcon,
+  HomeIcon,
+  LayersIcon,
+  SettingIcon,
+  UserPasswordIcon,
+  ArrowUpCircleIcon,
+  ArrowDownCircleIcon,
+  ViewListIcon,
+  ViewColumnIcon,
 } from 'tdesign-icons-vue-next';
 import LoadBalance from '@/pages/waf/loadbalance/index.vue';
 import HttpAuthBase from '@/pages/waf/http_auth_base/index.vue';
@@ -520,6 +555,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'submit', payload: { result: Record<string, any> }): void;
+  (e: 'tab-placement-change', placement: string): void;
 }>();
 
 const { t } = useI18n();
@@ -557,6 +593,29 @@ const csrfConfigData = ref<Record<string, any>>({ ...INITIAL_CSRF, protect_metho
 const tamperConfigData = ref<Record<string, any>>({ ...INITIAL_TAMPER });
 const uploadSecurityConfigData = ref<Record<string, any>>({ ...INITIAL_UPLOAD_SECURITY });
 const activeTab = ref<number>(1); // 当前激活的配置 Tab（受控，供防御总览开关「配置详情」跳转）
+
+// Tab 布局：left=竖向（默认），top=横向；用户偏好持久化到 localStorage
+const tabPlacement = ref<'left' | 'top'>(localStorage.getItem('samwaf_host_tab_placement') === 'top' ? 'top' : 'left');
+const tabsRef = ref();
+
+// 切换 Tab 横向/竖向布局，偏好持久化并通知父级调整弹窗宽度
+const toggleTabPlacement = () => {
+  tabPlacement.value = tabPlacement.value === 'left' ? 'top' : 'left';
+  localStorage.setItem('samwaf_host_tab_placement', tabPlacement.value);
+  emit('tab-placement-change', tabPlacement.value);
+};
+
+// 切换 Tab 后把内容区和弹窗滚动位置复位到顶部，避免左侧导航过长时右侧内容"看起来是空的"
+watch(activeTab, () => {
+  nextTick(() => {
+    const tabsEl = tabsRef.value?.$el as HTMLElement | undefined;
+    if (!tabsEl) return;
+    const content = tabsEl.querySelector('.t-tabs__content');
+    if (content) content.scrollTop = 0;
+    const dialogBody = tabsEl.closest('.t-dialog__body');
+    if (dialogBody) dialogBody.scrollTop = 0;
+  });
+});
 
 // 引擎自带防护表格列
 const defenseColumns = computed(() => [
@@ -1357,6 +1416,47 @@ getHttpsRedirectConfig();
 </script>
 
 <style scoped>
+/* 切换 Tab 布局按钮独占一行、右对齐，避免遮挡标签或内容 */
+.tab-placement-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 2px;
+}
+/* 竖向布局：限制整体高度，左侧导航与右侧内容各自独立滚动；
+   否则导航过长会把弹窗撑高，切换靠下的 Tab 时内容在顶部，看起来像空的 */
+.host-tabs-wrapper--left :deep(.t-tabs__header),
+.host-tabs-wrapper--left :deep(.t-tabs__content) {
+  max-height: 65vh;
+  overflow-y: auto;
+  /* 滚动条平时隐藏、悬停才显示，避免左右两根粗滚动条并排刺眼 */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.host-tabs-wrapper--left :deep(.t-tabs__header:hover),
+.host-tabs-wrapper--left :deep(.t-tabs__content:hover) {
+  scrollbar-color: rgba(0, 0, 0, 0.25) transparent;
+}
+.host-tabs-wrapper--left :deep(.t-tabs__header)::-webkit-scrollbar,
+.host-tabs-wrapper--left :deep(.t-tabs__content)::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.host-tabs-wrapper--left :deep(.t-tabs__header)::-webkit-scrollbar-thumb,
+.host-tabs-wrapper--left :deep(.t-tabs__content)::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+.host-tabs-wrapper--left :deep(.t-tabs__header:hover)::-webkit-scrollbar-thumb,
+.host-tabs-wrapper--left :deep(.t-tabs__content:hover)::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.25);
+}
+.host-tabs-wrapper--left :deep(.t-tabs__header)::-webkit-scrollbar-track,
+.host-tabs-wrapper--left :deep(.t-tabs__content)::-webkit-scrollbar-track,
+.host-tabs-wrapper--left :deep(.t-tabs__header)::-webkit-scrollbar-button,
+.host-tabs-wrapper--left :deep(.t-tabs__content)::-webkit-scrollbar-button {
+  display: none;
+}
+
 .host-form-ip-mode-help-icon {
   margin-left: 6px;
   vertical-align: middle;
