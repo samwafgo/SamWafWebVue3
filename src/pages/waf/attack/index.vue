@@ -254,6 +254,9 @@
             </t-tag>
             <span v-else>-</span>
           </template>
+          <template #host_nickname="{ row }">
+            <span>{{ host_nickname_dic[row.host_code] || '-' }}</span>
+          </template>
           <template #src_ip="{ row }">
             <span>{{ row.src_ip }}</span>
             <t-button theme="primary" shape="round" size="small" style="margin-left: 8px" @click="handleAddipblock(row)">
@@ -461,6 +464,9 @@ const attackLogStore = useAttackLogStore();
 
 const staticColumn = ['action', 'op'];
 
+// 默认不显示的可选列：新增后不会被"新列自动加入"逻辑塞进已有用户的可见列，需用户主动勾选
+const OPT_OUT_NEW_COLUMNS = ['host_nickname'];
+
 const searchForm = ref<FormInstanceFunctions>();
 
 const dateControl = reactive({
@@ -667,6 +673,15 @@ const columns = computed<TableProps['columns']>(() => [
   { title: t('page.visit_log.trigger_rule'), align: 'left', width: 150, ellipsis: true, colKey: 'rule' },
   { title: t('page.visit_log.time'), width: 170, ellipsis: true, colKey: 'create_time', sorter: true },
   { title: t('page.visit_log.domain'), align: 'left', width: 150, ellipsis: true, colKey: 'host' },
+  // 网站昵称：非 web_logs 真实列，由 host_code 在前端换取，故不支持排序/过滤
+  {
+    title: t('page.visit_log.host_nickname'),
+    align: 'left',
+    width: 130,
+    ellipsis: true,
+    colKey: 'host_nickname',
+    cell: 'host_nickname',
+  },
   { title: t('page.visit_log.request'), width: 70, ellipsis: true, colKey: 'method' },
   { title: t('page.visit_log.source_ip'), width: 200, ellipsis: true, colKey: 'src_ip', cell: 'src_ip' },
   { title: t('page.visit_log.country'), width: 100, ellipsis: true, colKey: 'country' },
@@ -697,6 +712,7 @@ const availableFields = computed(() => [
   { value: 'rule', label: t('page.visit_log.trigger_rule') },
   { value: 'create_time', label: t('common.create_time') },
   { value: 'host', label: t('page.visit_log.domain') },
+  { value: 'host_nickname', label: t('page.visit_log.host_nickname') },
   { value: 'method', label: t('page.visit_log.access_method') },
   { value: 'url', label: t('page.visit_log.access_url') },
   { value: 'header', label: t('page.visit_log.request') },
@@ -744,6 +760,8 @@ const filters = reactive({
 });
 
 const host_dic = reactive<Record<string, string>>({});
+// 主机昵称字典 host_code -> 纯昵称
+const host_nickname_dic = reactive<Record<string, string>>({});
 const share_db_dic = reactive<Record<string, string>>({});
 const exportDbVisible = ref(false);
 // 当前是否为文件型数据库(SQLite)：仅 SQLite 支持日志文件导出，MySQL 隐藏导出按钮
@@ -904,6 +922,8 @@ function loadColumnConfig() {
       // 仅自动加入"用户从未见过的新功能列"（如新增的 ai_score），
       // 用户主动取消勾选的列刷新后不再被强行加回
       allFieldKeys.forEach((col) => {
+        // 默认不显示的新列（需用户主动在列配置里勾选），不参与"新列自动加入"
+        if (OPT_OUT_NEW_COLUMNS.includes(col)) return;
         if (!knownKeys.includes(col) && !merged.includes(col)) merged.push(col);
       });
     }
@@ -982,6 +1002,7 @@ function loadHostList() {
           const hostOptions = res.data;
           for (let i = 0; i < hostOptions.length; i++) {
             host_dic[hostOptions[i].value] = hostOptions[i].label;
+            host_nickname_dic[hostOptions[i].value] = hostOptions[i].nickname || '';
           }
         }
         resolve();
