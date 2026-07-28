@@ -138,10 +138,22 @@ function handelTimeChange(val: any) {
 
 function handleIpClick(ip: string) {
   if (ip && ip.trim() !== '') {
-    router.push({
-      name: 'WafvisitLog',
-      query: { src_ip: ip },
-    });
+    // 带上当前榜单的时间口径（今日/近7天），否则点"近7天"榜里的 IP 落地页只查当天会是空列表
+    const beginDay = rangeType.value === 'week' ? LAST_7_DAYS[0] : NowDate;
+    router
+      .push({
+        name: 'WafvisitLog',
+        query: {
+          src_ip: ip,
+          action: '', // 显式清空状态筛选，避免沿用上次的"阻止/禁止"
+          date_begin: `${beginDay} 00:00:00`,
+          date_end: `${NowDate} 23:59:59`,
+        },
+      })
+      // vue-router4 重复导航不再 reject（返回 NavigationFailure），这里只兜真实的导航异常
+      .catch((err: any) => {
+        console.warn(err);
+      });
   }
 }
 </script>
