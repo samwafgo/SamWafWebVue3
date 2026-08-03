@@ -58,6 +58,12 @@ const wafRoutes: RouteRecordRaw[] = [
         meta: { title: 'menu.host.deny_ip' },
       },
       {
+        path: 'wafipgroup',
+        name: 'WafIpGroup',
+        component: () => import('@/pages/waf/ipgroup/index.vue'),
+        meta: { title: 'menu.host.ip_group' },
+      },
+      {
         path: 'wafurlblocklist',
         name: 'WafUrlBlockList',
         component: () => import('@/pages/waf/urlblock/index.vue'),

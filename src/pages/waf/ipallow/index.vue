@@ -52,6 +52,16 @@
           <template #host_code="{ row }">
             <span>{{ host_dic[row.host_code] }}</span>
           </template>
+          <template #ip_type="{ row }">
+            <t-tag v-if="row.ip_type === 'group'" theme="primary" variant="light">
+              {{ t('page.ipallow.entry_type_group') }}
+            </t-tag>
+            <span v-else>{{ t('page.ipallow.entry_type_ip') }}</span>
+          </template>
+          <template #ip="{ row }">
+            <span v-if="row.ip_type === 'group'">{{ groupLabel(row.group_code) }}</span>
+            <span v-else>{{ row.ip }}</span>
+          </template>
 
           <template #op="slotProps">
             <a class="t-button-link" @click="handleClickEdit(slotProps)">{{ t('common.edit') }}</a>
@@ -70,8 +80,28 @@
             </t-option>
           </t-select>
         </t-form-item>
-        <t-form-item :label="t('page.ipallow.label_ip')" name="ip">
-          <t-input v-model="formData.ip" :style="{ width: '480px' }" />
+        <t-form-item :label="t('page.ipallow.label_entry_type')" name="ip_type">
+          <t-radio-group v-model="formData.ip_type">
+            <t-radio-button value="ip">{{ t('page.ipallow.entry_type_ip') }}</t-radio-button>
+            <t-radio-button value="group">{{ t('page.ipallow.entry_type_group') }}</t-radio-button>
+          </t-radio-group>
+        </t-form-item>
+        <t-form-item v-if="formData.ip_type !== 'group'" :label="t('page.ipallow.label_ip')" name="ip">
+          <t-input v-model="formData.ip" :style="{ width: '480px' }" :placeholder="t('page.ipallow.ip_placeholder')" />
+          <div class="form-tips">{{ t('page.ipallow.ip_pattern_tips') }}</div>
+        </t-form-item>
+        <t-form-item v-else :label="t('page.ipallow.label_group')" name="group_code">
+          <t-select v-model="formData.group_code" clearable filterable :style="{ width: '480px' }">
+            <t-option
+              v-for="g in group_options"
+              :key="g.group_code"
+              :value="g.group_code"
+              :label="`${g.group_name} (${g.item_count})`"
+            />
+          </t-select>
+          <a class="t-button-link" style="margin-left: 8px" @click="router.push({ name: 'WafIpGroup' })">
+            {{ t('page.ipallow.goto_group_manage') }}
+          </a>
         </t-form-item>
         <t-form-item :label="t('common.remarks')" name="remarks">
           <t-textarea v-model="formData.remarks" :style="{ width: '480px' }" name="remarks" />
@@ -84,7 +114,7 @@
     </t-dialog>
 
     <t-dialog v-model:visible="editFormVisible" :header="t('common.edit')" :width="680" :footer="false">
-      <t-form :data="formEditData" :rules="rules" :label-width="100" @submit="onSubmitEdit">
+      <t-form :data="formEditData" :rules="editRules" :label-width="100" @submit="onSubmitEdit">
         <t-form-item :label="t('page.ipallow.label_website')" name="host_code">
           <t-select v-model="formEditData.host_code" clearable filterable :style="{ width: '480px' }">
             <t-option v-for="(item, index) in host_dic" :key="index" :value="index" :label="item">
@@ -92,8 +122,25 @@
             </t-option>
           </t-select>
         </t-form-item>
-        <t-form-item :label="t('page.ipallow.label_ip')" name="ip">
-          <t-input v-model="formEditData.ip" :style="{ width: '480px' }" />
+        <t-form-item :label="t('page.ipallow.label_entry_type')" name="ip_type">
+          <t-radio-group v-model="formEditData.ip_type">
+            <t-radio-button value="ip">{{ t('page.ipallow.entry_type_ip') }}</t-radio-button>
+            <t-radio-button value="group">{{ t('page.ipallow.entry_type_group') }}</t-radio-button>
+          </t-radio-group>
+        </t-form-item>
+        <t-form-item v-if="formEditData.ip_type !== 'group'" :label="t('page.ipallow.label_ip')" name="ip">
+          <t-input v-model="formEditData.ip" :style="{ width: '480px' }" :placeholder="t('page.ipallow.ip_placeholder')" />
+          <div class="form-tips">{{ t('page.ipallow.ip_pattern_tips') }}</div>
+        </t-form-item>
+        <t-form-item v-else :label="t('page.ipallow.label_group')" name="group_code">
+          <t-select v-model="formEditData.group_code" clearable filterable :style="{ width: '480px' }">
+            <t-option
+              v-for="g in group_options"
+              :key="g.group_code"
+              :value="g.group_code"
+              :label="`${g.group_name} (${g.item_count})`"
+            />
+          </t-select>
         </t-form-item>
         <t-form-item :label="t('common.remarks')" name="remarks">
           <t-textarea v-model="formEditData.remarks" :style="{ width: '480px' }" name="remarks" />
@@ -136,6 +183,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
 import { MessagePlugin, type FormProps, type PageInfo, type TableProps } from 'tdesign-vue-next';
 import { getOnlineUrl } from '@/utils/usuallytool';
 import { allhost } from '@/apis/host';
@@ -148,14 +196,18 @@ import {
   wafIPWhiteBatchDelApi,
   wafIPWhiteDelAllApi,
 } from '@/apis/ipwhite';
+import { wafIPGroupOptionsApi } from '@/apis/ipgroup';
 
 const INITIAL_DATA = {
   host_code: '',
   ip: '',
   remarks: '',
+  ip_type: 'ip',
+  group_code: '',
 };
 
 const { t } = useI18n();
+const router = useRouter();
 
 const addFormVisible = ref(false);
 const editFormVisible = ref(false);
@@ -165,10 +217,62 @@ const clearAllVisible = ref(false);
 const formData = ref<Record<string, any>>({ ...INITIAL_DATA });
 const formEditData = ref<Record<string, any>>({ ...INITIAL_DATA });
 
+// 新增与编辑各用一份校验规则：两个弹窗共用同一份时，
+// 依赖 ip_type 的条件校验会读到另一个弹窗的表单值而误判
 const rules: FormProps['rules'] = {
   host_code: [{ required: true, message: t('common.placeholder') + t('page.ipallow.label_website'), type: 'error' }],
-  ip: [{ required: true, message: t('common.placeholder') + t('page.ipallow.label_ip'), type: 'error' }],
+  ip: [
+    {
+      validator: (val) => formData.value.ip_type === 'group' || !!val,
+      message: t('common.placeholder') + t('page.ipallow.label_ip'),
+      type: 'error',
+    },
+  ],
+  group_code: [
+    {
+      validator: (val) => formData.value.ip_type !== 'group' || !!val,
+      message: t('common.placeholder') + t('page.ipallow.label_group'),
+      type: 'error',
+    },
+  ],
 };
+
+const editRules: FormProps['rules'] = {
+  host_code: [{ required: true, message: t('common.placeholder') + t('page.ipallow.label_website'), type: 'error' }],
+  ip: [
+    {
+      validator: (val) => formEditData.value.ip_type === 'group' || !!val,
+      message: t('common.placeholder') + t('page.ipallow.label_ip'),
+      type: 'error',
+    },
+  ],
+  group_code: [
+    {
+      validator: (val) => formEditData.value.ip_type !== 'group' || !!val,
+      message: t('common.placeholder') + t('page.ipallow.label_group'),
+      type: 'error',
+    },
+  ],
+};
+
+// IP组下拉选项
+const group_options = ref<Record<string, any>[]>([]);
+
+function loadGroupOptions() {
+  wafIPGroupOptionsApi()
+    .then((res) => {
+      if (res.code === 0) {
+        group_options.value = res.data ?? [];
+      }
+    })
+    .catch((e: Error) => console.log(e));
+}
+
+// 列表里组引用行显示「组名(条目数)」；组已被删时退回显示短码
+function groupLabel(groupCode: string) {
+  const g = group_options.value.find((x) => x.group_code === groupCode);
+  return g ? `${g.group_name} (${g.item_count})` : groupCode;
+}
 
 const dataLoading = ref(false);
 const data = ref<Record<string, any>[]>([]);
@@ -178,6 +282,7 @@ const rowKey = 'id';
 const columns = computed<TableProps['columns']>(() => [
   { colKey: 'row-select', type: 'multiple', width: 64, fixed: 'left' },
   { title: t('page.ipallow.label_website'), align: 'left', width: 250, ellipsis: true, colKey: 'host_code', fixed: 'left' },
+  { title: t('page.ipallow.col_entry_type'), width: 110, colKey: 'ip_type' },
   { title: t('page.ipallow.label_ip'), width: 200, ellipsis: true, colKey: 'ip' },
   { title: t('common.remarks'), width: 200, ellipsis: true, colKey: 'remarks' },
   { title: t('common.create_time'), width: 200, ellipsis: true, colKey: 'create_time' },
@@ -258,6 +363,7 @@ function handleClickEdit(e: { row: Record<string, any> }) {
 function handleAddIpWhite() {
   addFormVisible.value = true;
   formData.value = { ...INITIAL_DATA };
+  loadGroupOptions();
 }
 
 const onSubmit: FormProps['onSubmit'] = ({ firstError }) => {
@@ -340,7 +446,12 @@ function getDetail(id: string | number) {
   wafIPWhiteDetailApi({ id })
     .then((res) => {
       if (res.code === 0) {
-        formEditData.value = { ...res.data };
+        formEditData.value = {
+          ...res.data,
+          // 存量记录的 ip_type 是空串，等价于「单条IP」
+          ip_type: res.data.ip_type || 'ip',
+          group_code: res.data.group_code || '',
+        };
       }
     })
     .catch((e: Error) => console.log(e));
@@ -409,6 +520,7 @@ onMounted(() => {
   loadHostList().then(() => {
     getList();
   });
+  loadGroupOptions();
 });
 </script>
 
@@ -423,5 +535,11 @@ onMounted(() => {
 
 .search-input {
   width: 200px;
+}
+
+.form-tips {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
 }
 </style>
