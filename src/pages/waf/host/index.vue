@@ -165,7 +165,11 @@
     </t-dialog>
 
     <!-- Edit WebSite Dialog -->
-    <t-dialog v-model:visible="editFormVisible" :header="t('common.edit')" :width="hostFormDialogWidth" :footer="false">
+    <t-dialog v-model:visible="editFormVisible" :width="hostFormDialogWidth" :footer="false">
+      <template #header>
+        {{ t('common.edit') }}
+        <span v-if="editHostLabel" class="dialog-header-host">{{ editHostLabel }}</span>
+      </template>
       <host-form :value="formEditData" :select-can-filter="selectCanFilter" :is-edit="true" @close="onClickCloseEditBtn" @submit="onSubmitEdit" @tab-placement-change="onHostTabPlacementChange" />
     </t-dialog>
 
@@ -538,6 +542,26 @@ const confirmBody = computed(() => {
   return '';
 });
 
+/** 编辑弹窗标题上显示的站点信息，格式与顶部站点下拉一致：域名:端口(昵称,SSL,备注) */
+const editHostLabel = computed(() => {
+  const data = formEditData.value || {};
+  if (!data.host) {
+    return '';
+  }
+  const bracketContent: string[] = [];
+  if (data.nickname) {
+    bracketContent.push(data.nickname);
+  }
+  if (Number(data.ssl) === 1) {
+    bracketContent.push('SSL');
+  }
+  if (data.remarks) {
+    bracketContent.push(data.remarks);
+  }
+  const baseLabel = `${data.host}:${data.port}`;
+  return bracketContent.length > 0 ? `${baseLabel}(${bracketContent.join(',')})` : baseLabel;
+});
+
 /** 批量复制源站点选项（排除全局网站） */
 const sourceHostOptions = computed(() =>
   Object.keys(host_dic.value)
@@ -708,6 +732,8 @@ function handleClickEdit(e: { row: Record<string, any> }) {
     MessagePlugin.warning(t('page.host.forbid_for_global_site_only_change_guard_status'));
     return;
   }
+  // 先清空，避免详情返回前弹窗标题上还显示上一个站点信息
+  formEditData.value = { code: '' };
   editFormVisible.value = true;
   getDetail(code);
 }
@@ -1162,6 +1188,14 @@ onMounted(() => {
 
 .module-checkbox {
   margin: 0;
+}
+
+.dialog-header-host {
+  margin-left: 8px;
+  font-size: 14px;
+  font-weight: normal;
+  color: var(--td-text-color-secondary);
+  word-break: break-all;
 }
 
 .target-hosts-container {
