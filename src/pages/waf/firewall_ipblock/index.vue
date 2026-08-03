@@ -1,5 +1,7 @@
 <template>
   <div>
+    <t-tabs v-model="activeSourceTab" @change="onSourceTabChange">
+    <t-tab-panel value="manual" :label="t('page.firewall_ipblock.tab_manual')">
     <t-card class="list-card-container">
       <t-row justify="space-between">
         <div class="left-operation-container">
@@ -86,6 +88,18 @@
             </div>
           </t-card>
         </t-col>
+        <t-col :span="3">
+          <t-card size="small" class="stat-card-clickable" @click="goSubSourceTab">
+            <div class="stat-card">
+              <div class="stat-label">
+                {{ t('page.firewall_ipblock.stat_sub_landed') }}
+                <chevron-right-icon />
+              </div>
+              <div class="stat-value stat-sub">{{ subLandedTotal }}</div>
+              <div class="stat-sub-hint">{{ t('page.firewall_ipblock.stat_sub_landed_hint') }}</div>
+            </div>
+          </t-card>
+        </t-col>
       </t-row>
 
       <t-alert
@@ -165,6 +179,13 @@
         </t-table>
       </div>
     </t-card>
+    </t-tab-panel>
+    <t-tab-panel value="sub" :label="t('page.firewall_ipblock.tab_sub_source')">
+      <t-card class="list-card-container">
+        <ThreatSubSourcePanel ref="subPanel" land="system" />
+      </t-card>
+    </t-tab-panel>
+    </t-tabs>
 
     <!-- 添加对话框 -->
     <t-dialog v-model:visible="addFormVisible" :header="t('common.new')" :width="680" :footer="false">
@@ -305,15 +326,27 @@
       @confirm="onConfirmBatchDelete"
       @cancel="batchDeleteConfirmVisible = false"
     />
+
+    <!-- 清理过期确认对话框（会删除已过期记录，不可恢复） -->
+    <t-dialog
+      v-model:visible="clearExpiredConfirmVisible"
+      :header="t('page.firewall_ipblock.confirm_clear_expired')"
+      :body="t('page.firewall_ipblock.confirm_clear_expired_body')"
+      @confirm="onConfirmClearExpired"
+      @cancel="clearExpiredConfirmVisible = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin, type FormProps, type PageInfo, type TableProps } from 'tdesign-vue-next';
+import { ChevronRightIcon } from 'tdesign-icons-vue-next';
 import { getOnlineUrl } from '@/utils/usuallytool';
 import { allhost } from '@/apis/host';
+import { wafThreatIPLandedSummaryApi } from '@/apis/threatip';
+import ThreatSubSourcePanel from '@/pages/waf/threatip/components/ThreatSubSourcePanel.vue';
 import {
   wafFirewallIPBlockListApi,
   wafFirewallIPBlockAddApi,
@@ -377,6 +410,12 @@ const statistics = ref({ total: 0, active: 0, inactive: 0, expired: 0 });
 // 当前环境是否具备系统防火墙封禁能力（容器内未装 iptables / 缺少权限时为 false）
 const fwCapability = ref({ available: true, message: '' });
 const rowKey = 'id';
+// 手工封禁 / 订阅来源 Tab
+const activeSourceTab = ref('manual');
+const subPanel = ref();
+// 订阅落地到系统防火墙的总条数(供统计卡片对照展示)
+const subLandedTotal = ref(0);
+const clearExpiredConfirmVisible = ref(false);
 
 const columns = computed<TableProps['columns']>(() => [
   { colKey: 'row-select', type: 'multiple', width: 64, fixed: 'left' },
@@ -691,6 +730,12 @@ function handleSync() {
 }
 
 function handleClearExpired() {
+  // 清理过期会【删除】已过期记录(不可恢复)，先二次确认
+  clearExpiredConfirmVisible.value = true;
+}
+
+function onConfirmClearExpired() {
+  clearExpiredConfirmVisible.value = false;
   wafFirewallIPBlockClearExpiredApi({})
     .then((res) => {
       if (res.code === 0) {
@@ -702,6 +747,33 @@ function handleClearExpired() {
       }
     })
     .catch((e: Error) => console.log(e));
+}
+
+// 汇总订阅落地到系统防火墙的总条数(供统计卡片对照展示)
+function loadSubLandedTotal() {
+  wafThreatIPLandedSummaryApi({ land: 'system' })
+    .then((res) => {
+      if (res.code === 0) {
+        const list = res.data ?? [];
+        subLandedTotal.value = list.reduce((sum: number, it: Record<string, any>) => sum + (it.count || 0), 0);
+      }
+    })
+    .catch(() => {});
+}
+
+function onSourceTabChange(val: string) {
+  // 切到"订阅来源"Tab 时刷新汇总
+  if (val === 'sub' && subPanel.value) {
+    subPanel.value.refresh();
+  }
+}
+
+// 点击"订阅落地(系统层)"统计卡 → 切到"订阅来源"Tab 看逐渠道详情
+function goSubSourceTab() {
+  activeSourceTab.value = 'sub';
+  nextTick(() => {
+    if (subPanel.value) subPanel.value.refresh();
+  });
 }
 
 function onClickCloseBtn() {
@@ -758,6 +830,7 @@ onMounted(() => {
     getList();
     getStatistics();
   });
+  loadSubLandedTotal();
 });
 </script>
 
@@ -801,5 +874,27 @@ onMounted(() => {
 
 .stat-value.stat-expired {
   color: #faad14;
+}
+
+.stat-value.stat-sub {
+  color: #1677ff;
+}
+
+.stat-sub-hint {
+  font-size: 12px;
+  color: #1677ff;
+  margin-top: 4px;
+}
+
+.stat-card-clickable {
+  cursor: pointer;
+  transition:
+    box-shadow 0.2s,
+    border-color 0.2s;
+}
+
+.stat-card-clickable:hover {
+  border-color: #1677ff;
+  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.2);
 }
 </style>

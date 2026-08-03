@@ -36,6 +36,33 @@ export function updateManageTrustedProxiesApi(data: Record<string, any>) {
   });
 }
 
+/** 获取管理端引用的 CDN 厂商码 */
+export function getManageCDNProviderApi(params: Record<string, any>) {
+  return request({
+    url: 'vipconfig/getManageCDNProvider',
+    method: 'get',
+    params,
+  });
+}
+
+/** 更新管理端引用的 CDN 厂商码(设置后自动信任该厂商中心库最新回源段) */
+export function updateManageCDNProviderApi(data: Record<string, any>) {
+  return request({
+    url: 'vipconfig/updateManageCDNProvider',
+    method: 'post',
+    data,
+  });
+}
+
+/** 分页浏览某 CDN 厂商回源段(只读) */
+export function getCdnProviderRangesApi(params: Record<string, any>) {
+  return request({
+    url: 'vipconfig/cdnProviderRanges',
+    method: 'get',
+    params,
+  });
+}
+
 /** 获取CORS跨域来源白名单 */
 export function getCorsAllowOriginsApi(params: Record<string, any>) {
   return request({

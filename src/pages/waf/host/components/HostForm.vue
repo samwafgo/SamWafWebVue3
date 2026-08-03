@@ -283,6 +283,82 @@
                 </t-radio>
               </t-radio-group>
             </t-form-item>
+            <!-- 真实IP来源加固：仅代理模式下有意义(网卡模式直接用网络层IP，此设置被忽略)。
+                 默认(空)保持旧行为取 XFF 最左，向后兼容；选择加固模式后才改变取值。 -->
+            <t-form-item v-if="formData.ip_mode === 'proxy'" name="ip_source_mode">
+              <template #label>
+                <span>{{ t('page.host.ip_source_mode') }}</span>
+                <t-tooltip :content="t('page.host.ip_source_mode_tips')" placement="top" :overlay-style="{ width: '340px' }" show-arrow>
+                  <help-circle-icon class="host-form-ip-mode-help-icon" />
+                </t-tooltip>
+              </template>
+              <t-select v-model="formData.ip_source_mode" :style="{ width: '320px' }" clearable>
+                <t-option value="" :label="t('page.host.ip_source_compat')" />
+                <t-option value="header" :label="t('page.host.ip_source_header')" />
+                <t-option value="xff_depth" :label="t('page.host.ip_source_xff')" />
+                <t-option value="cdn_preset" :label="t('page.host.ip_source_cdn')" />
+              </t-select>
+              <div class="limit-mode-desc">{{ ipSourceModeDesc }}</div>
+            </t-form-item>
+            <t-form-item
+              v-if="formData.ip_mode === 'proxy' && formData.ip_source_mode === 'cdn_preset'"
+              :label="t('page.host.cdn_provider')"
+              name="cdn_provider"
+            >
+              <t-select v-model="formData.cdn_provider" :style="{ width: '320px' }" @change="onCdnProviderChange">
+                <t-option value="cloudflare" label="Cloudflare (CF-Connecting-IP)" />
+                <t-option value="fastly" label="Fastly (Fastly-Client-IP)" />
+                <t-option value="cloudfront" label="AWS CloudFront" />
+                <t-option value="edgeone" label="腾讯云 EdgeOne (EO-Client-IP)" />
+                <t-option value="aliyun" label="阿里云 CDN (Ali-Cdn-Real-Ip)" />
+                <t-option value="akamai" label="Akamai (True-Client-IP)" />
+              </t-select>
+            </t-form-item>
+            <!-- CDN 回源段由中心库统一管理：只读展示已下载条数/上次更新，不让用户手填 -->
+            <t-form-item
+              v-if="formData.ip_mode === 'proxy' && formData.ip_source_mode === 'cdn_preset' && formData.cdn_provider"
+              :label="t('page.host.cdn_trusted_ips')"
+            >
+              <div>
+                <template v-if="cdnProviderInfo">
+                  <span v-if="cdnProviderInfo.count > 0" style="color: var(--td-success-color)">
+                    {{ t('page.host.cdn_downloaded', { count: cdnProviderInfo.count }) }}
+                    <span style="color: var(--td-text-color-placeholder)"
+                      >（{{ t('page.host.cdn_last_update') }}: {{ formatCdnTs(cdnProviderInfo.last_sync_at) }}）</span
+                    >
+                  </span>
+                  <span v-else style="color: var(--td-warning-color)">{{ t('page.host.cdn_not_fetched') }}</span>
+                  <t-link theme="primary" hover="color" style="margin-left: 12px" @click="goCdnPage">{{
+                    t('page.host.cdn_manage_link')
+                  }}</t-link>
+                </template>
+                <span v-else style="color: var(--td-text-color-placeholder)">-</span>
+                <div class="limit-mode-desc">{{ t('page.host.cdn_trusted_ips_tips') }}</div>
+              </div>
+            </t-form-item>
+            <t-form-item
+              v-if="formData.ip_mode === 'proxy' && formData.ip_source_mode === 'header'"
+              :label="t('page.host.ip_real_header')"
+              name="ip_real_header"
+            >
+              <t-input :style="{ width: '320px' }" v-model="formData.ip_real_header" placeholder="X-Real-IP / CF-Connecting-IP" />
+            </t-form-item>
+            <t-form-item
+              v-if="formData.ip_mode === 'proxy' && formData.ip_source_mode === 'xff_depth'"
+              :label="t('page.host.ip_trust_depth')"
+              name="ip_trust_depth"
+            >
+              <t-input-number :style="{ width: '150px' }" v-model="formData.ip_trust_depth" :min="1" theme="column" />
+            </t-form-item>
+            <t-form-item
+              v-if="formData.ip_mode === 'proxy' && formData.ip_source_mode === 'xff_depth'"
+              :label="t('page.host.ip_trust_proxies')"
+              name="ip_trust_proxies"
+            >
+              <t-tooltip :content="t('page.host.ip_trust_proxies_tips')" placement="top" :overlay-style="{ width: '280px' }" show-arrow>
+                <t-textarea :style="{ width: '320px' }" v-model="formData.ip_trust_proxies" placeholder="172.16.0.0/12,10.0.0.0/8" />
+              </t-tooltip>
+            </t-form-item>
             <t-form-item :label="t('page.host.exclude_url_log')" name="exclude_url_log">
               <t-tooltip :content="t('page.host.exclude_url_log_tips')" placement="top" :overlay-style="{ width: '200px' }" show-arrow>
                 <t-textarea
@@ -542,6 +618,7 @@ import {
 import { sslConfigListApi, sslConfigAddApi, sslConfigEditApi } from '@/apis/sslconfig';
 import { getOrDefault } from '@/utils/usuallytool';
 import { get_detail_by_item_api, edit_system_config_by_item_api } from '@/apis/systemconfig';
+import { wafCDNProviderInfoApi } from '@/apis/cdnip';
 
 const props = withDefaults(
   defineProps<{
@@ -565,6 +642,41 @@ const formData = ref<Record<string, any>>({
   ...JSON.parse(JSON.stringify(props.value)),
   ssl_config_mode: 'existing',
 });
+
+// cdn_preset 模式下所选厂商中心库状态(只读展示)
+const cdnProviderInfo = ref<Record<string, any> | null>(null);
+
+// 真实IP来源：随所选模式返回对应解释文案(显示在下拉框下方)
+const ipSourceModeDesc = computed(() => {
+  const map: Record<string, string> = {
+    '': 'page.host.ip_source_compat_desc',
+    header: 'page.host.ip_source_header_desc',
+    xff_depth: 'page.host.ip_source_xff_desc',
+    cdn_preset: 'page.host.ip_source_cdn_desc',
+  };
+  return t(map[formData.value.ip_source_mode] || 'page.host.ip_source_compat_desc');
+});
+
+// 切换 CDN 厂商 → 拉取该厂商中心库状态
+function onCdnProviderChange(v: string) {
+  cdnProviderInfo.value = null;
+  if (v) loadCdnProviderInfo(v);
+}
+function loadCdnProviderInfo(provider: string) {
+  wafCDNProviderInfoApi({ provider })
+    .then((res) => {
+      if (res.code === 0) cdnProviderInfo.value = res.data;
+    })
+    .catch(() => {});
+}
+function formatCdnTs(ts: number) {
+  if (!ts) return '-';
+  return new Date(ts * 1000).toLocaleString();
+}
+function goCdnPage() {
+  const route = router.resolve({ name: 'WafCDNIP' });
+  window.open(route.href, '_blank');
+}
 
 // 主机防御细节
 const hostDefenseData = ref<Record<string, string>>({
@@ -765,7 +877,17 @@ watch(
     fd.insecure_skip_verify = fd.insecure_skip_verify != null ? fd.insecure_skip_verify.toString() : '0';
     fd.log_only_mode = fd.log_only_mode != null ? fd.log_only_mode.toString() : '0';
     fd.ip_mode = fd.ip_mode === 'proxy' ? 'proxy' : 'nic';
+    // 真实IP来源加固字段（向后兼容：空=旧行为取XFF最左）
+    fd.ip_source_mode = fd.ip_source_mode || '';
+    fd.ip_real_header = fd.ip_real_header || '';
+    fd.ip_trust_depth = fd.ip_trust_depth != null ? Number(fd.ip_trust_depth) : 1;
+    fd.ip_trust_proxies = fd.ip_trust_proxies || '';
+    fd.cdn_provider = fd.cdn_provider || '';
     formData.value = fd;
+    // 编辑已有站点且为 cdn_preset 时，加载所选厂商中心库状态
+    if (fd.ip_source_mode === 'cdn_preset' && fd.cdn_provider) {
+      loadCdnProviderInfo(fd.cdn_provider);
+    }
 
     // 解析防御配置
     if (fd.defense_json) {

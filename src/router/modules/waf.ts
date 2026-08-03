@@ -124,6 +124,18 @@ const wafRoutes: RouteRecordRaw[] = [
         meta: { title: 'menu.host.firewall_ip_block' },
       },
       {
+        path: 'wafThreatIP',
+        name: 'WafThreatIP',
+        component: () => import('@/pages/waf/threatip/index.vue'),
+        meta: { title: 'menu.host.threat_ip' },
+      },
+      {
+        path: 'wafCDNIP',
+        name: 'WafCDNIP',
+        component: () => import('@/pages/waf/cdnip/index.vue'),
+        meta: { title: 'menu.host.cdn_ip' },
+      },
+      {
         path: 'wafPathRulelist',
         name: 'WafPathRuleList',
         component: () => import('@/pages/waf/path_rule/index.vue'),
