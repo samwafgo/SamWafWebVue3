@@ -208,6 +208,7 @@ const columns = computed<TableProps['columns']>(() => [
   { title: t('page.rule.label_website'), align: 'left', width: 200, ellipsis: true, colKey: 'host_code' },
   { title: t('page.rule.label_rule_name'), align: 'left', width: 200, ellipsis: true, colKey: 'rule_name' },
   { title: t('page.rule.label_rule_code'), align: 'left', width: 200, ellipsis: true, colKey: 'rule_code' },
+  { title: t('page.rule.label_rule_salience'), align: 'left', width: 90, colKey: 'salience' },
   { title: t('page.rule.label_rule_version'), colKey: 'rule_version', width: 70 },
   { title: t('page.rule.label_rule_status'), colKey: 'rule_status', width: 70 },
   { title: t('common.update_time'), width: 200, ellipsis: true, colKey: 'update_time' },

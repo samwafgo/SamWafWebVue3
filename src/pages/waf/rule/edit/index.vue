@@ -20,7 +20,14 @@
           </t-select>
         </t-form-item>
         <t-form-item :label="t('page.rule.detail.rule_salience')" name="salience">
-          <t-input v-model="formData.rule_base.salience" :placeholder="t('common.placeholder')" />
+          <div>
+            <t-input v-model="formData.rule_base.salience" :placeholder="t('common.placeholder')" />
+            <div class="form-item-tips">
+              <div>{{ t('page.rule.detail.rule_salience_tips_1') }}</div>
+              <div>{{ t('page.rule.detail.rule_salience_tips_2') }}</div>
+              <div>{{ t('page.rule.detail.rule_salience_tips_3') }}</div>
+            </div>
+          </div>
         </t-form-item>
         <t-form-item :label="t('page.rule.detail.rule_manual')" name="is_manual_rule">
           <t-select v-model="formData.is_manual_rule" :style="{ width: '480px' }" @change="changeManualRule">
@@ -1240,6 +1247,13 @@ onMounted(() => {
 .detail-base :deep(.t-card) {
   padding: 8px;
   margin-bottom: 16px;
+}
+
+.form-item-tips {
+  color: #999;
+  font-size: 12px;
+  margin-top: 4px;
+  line-height: 1.5;
 }
 
 .detail-base :deep(.t-card__title) {
