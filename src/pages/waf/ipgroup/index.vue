@@ -18,7 +18,12 @@
           </t-form>
         </div>
       </t-row>
-      <t-alert theme="info" :message="t('page.ipgroup.alert_message')" close />
+      <t-alert theme="info" :message="t('page.ipgroup.alert_message')" close>
+        <!-- 手工维护之外还能定时批量导入，这里给个入口，否则用户不知道有这功能 -->
+        <template #operation>
+          <span class="link-text" @click="handleJumpBatchTask">{{ t('page.ipgroup.goto_batch_task') }}</span>
+        </template>
+      </t-alert>
       <div class="table-container">
         <t-table
           :columns="columns"
@@ -106,6 +111,10 @@
           <t-button theme="danger" :disabled="itemData.length === 0" @click="clearItemsConfirmVisible = true">
             {{ t('page.ipgroup.button_clear_items') }}
           </t-button>
+          <!-- 一次性手工批量添加之外，还能建定时任务从文件/远程源自动同步 -->
+          <a class="t-button-link" style="margin-left: 8px" @click="handleJumpBatchTask">
+            {{ t('page.ipgroup.goto_batch_task') }}
+          </a>
         </div>
         <div class="right-operation-container">
           <t-form :data="itemSearchData" :label-width="40" layout="inline" colon :style="{ marginBottom: '8px' }">
@@ -248,6 +257,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
 import { MessagePlugin, type FormProps, type PageInfo, type TableProps } from 'tdesign-vue-next';
 import {
   wafIPGroupListApi,
@@ -271,6 +281,7 @@ const INITIAL_GROUP = {
 };
 
 const { t } = useI18n();
+const router = useRouter();
 
 const dataLoading = ref(false);
 const data = ref<Record<string, any>[]>([]);
@@ -531,6 +542,15 @@ function rehandleItemSelectChange(keys: (string | number)[]) {
   selectedItemKeys.value = keys;
 }
 
+// 跳到批量任务页；在某个组的抽屉里点的话把组带过去，直接预填成该组的导入任务
+function handleJumpBatchTask() {
+  const groupCode = itemDrawerVisible.value ? currentGroup.value.group_code : '';
+  router.push({
+    name: 'WafBatchTaskList',
+    query: groupCode ? { ip_group_code: groupCode } : {},
+  });
+}
+
 function handleAddItem() {
   itemFormData.value = { id: '', ip: '', remarks: '' };
   itemFormVisible.value = true;
@@ -685,5 +705,10 @@ onMounted(() => {
 
 .ref-host-list li {
   line-height: 22px;
+}
+
+.link-text {
+  cursor: pointer;
+  color: var(--td-brand-color);
 }
 </style>

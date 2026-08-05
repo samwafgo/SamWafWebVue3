@@ -37,7 +37,11 @@
           @page-change="rehandlePageChange"
         >
           <template #batch_host_code="{ row }">
-            <span> {{ host_dic[row.batch_host_code] }}</span>
+            <!-- IP组任务不绑定网站，这一列改显示目标IP组，否则整列空白看不出导到哪 -->
+            <t-tag v-if="row.batch_type === 'ipgroup'" theme="primary" variant="light">
+              {{ groupLabelOfTask(row) }}
+            </t-tag>
+            <span v-else> {{ host_dic[row.batch_host_code] }}</span>
           </template>
           <template #batch_type="{ row }">
             <p>
@@ -76,7 +80,11 @@
         <t-form-item :label="t('page.batchtask.label_batch_task_name')" name="batch_task_name">
           <t-input v-model="formData.batch_task_name" :style="{ width: '480px' }"></t-input>
         </t-form-item>
-        <t-form-item :label="t('page.batchtask.label_website')" name="batch_host_code">
+        <t-form-item
+          v-if="formData.batch_type !== 'ipgroup'"
+          :label="t('page.batchtask.label_website')"
+          name="batch_host_code"
+        >
           <t-select v-model="formData.batch_host_code" clearable :style="{ width: '480px' }">
             <t-option v-for="(item, index) in host_dic" :key="index" :value="index" :label="item">
               {{ item }}
@@ -88,7 +96,34 @@
             <t-option v-for="item in batchTaskTypeOptions" :key="item.value" :value="item.value" :label="`${item.label}`"></t-option>
           </t-select>
         </t-form-item>
-        <t-form-item :label="t('page.batchtask.label_batch_extra_config')" name="batch_extra_config">
+        <!-- IP组是租户级资源、不带网站，目标组通过额外配置里的 group_code 指定 -->
+        <t-form-item
+          v-if="formData.batch_type === 'ipgroup'"
+          :label="t('page.batchtask.label_ip_group')"
+          name="ip_group_code"
+        >
+          <div>
+            <t-select v-model="formData.ip_group_code" clearable filterable :style="{ width: '480px' }">
+              <t-option
+                v-for="g in groupOptions"
+                :key="g.group_code"
+                :value="g.group_code"
+                :label="`${g.group_name} (${g.item_count})`"
+              ></t-option>
+            </t-select>
+            <a class="t-button-link" style="margin-left: 8px" @click="handleJumpIPGroup">
+              {{ t('page.batchtask.ip_group_goto_manage') }}
+            </a>
+            <div style="margin-top: 8px; font-size: 12px; color: #666">
+              {{ groupOptions.length ? t('page.batchtask.ip_group_tips') : t('page.batchtask.ip_group_empty_tips') }}
+            </div>
+          </div>
+        </t-form-item>
+        <t-form-item
+          v-if="formData.batch_type !== 'ipgroup'"
+          :label="t('page.batchtask.label_batch_extra_config')"
+          name="batch_extra_config"
+        >
           <div>
             <t-textarea
               v-model="formData.batch_extra_config"
@@ -110,14 +145,22 @@
           <t-input v-model="formData.batch_source" :style="{ width: '480px' }"></t-input>
         </t-form-item>
         <t-form-item :label="t('page.batchtask.label_batch_execute_method')" name="batch_execute_method">
-          <t-select v-model="formData.batch_execute_method" :style="{ width: '480px' }">
-            <t-option
-              v-for="item in batchExecuteMethodOptions"
-              :key="item.value"
-              :value="item.value"
-              :label="`${item.label}`"
-            ></t-option>
-          </t-select>
+          <div>
+            <t-select v-model="formData.batch_execute_method" :style="{ width: '480px' }">
+              <t-option
+                v-for="item in batchExecuteMethodOptions"
+                :key="item.value"
+                :value="item.value"
+                :label="`${item.label}`"
+              ></t-option>
+            </t-select>
+            <div
+              v-if="formData.batch_type === 'ipgroup' && formData.batch_execute_method === 'overwrite'"
+              style="margin-top: 8px; font-size: 12px; color: #666"
+            >
+              {{ t('page.batchtask.ip_group_overwrite_tips') }}
+            </div>
+          </div>
         </t-form-item>
         <t-form-item :label="t('page.batchtask.label_batch_trigger_type')" name="batch_trigger_type">
           <t-select v-model="formData.batch_trigger_type" :style="{ width: '480px' }">
@@ -140,11 +183,15 @@
     </t-dialog>
 
     <t-dialog v-model:visible="editFormVisible" :header="t('common.edit')" :width="750" :footer="false">
-      <t-form ref="editForm" :data="formEditData" :rules="rules" :label-width="220" @submit="onSubmitEdit">
+      <t-form ref="editForm" :data="formEditData" :rules="editRules" :label-width="220" @submit="onSubmitEdit">
         <t-form-item :label="t('page.batchtask.label_batch_task_name')" name="batch_task_name">
           <t-input v-model="formEditData.batch_task_name" :style="{ width: '480px' }"></t-input>
         </t-form-item>
-        <t-form-item :label="t('page.batchtask.label_website')" name="batch_host_code">
+        <t-form-item
+          v-if="formEditData.batch_type !== 'ipgroup'"
+          :label="t('page.batchtask.label_website')"
+          name="batch_host_code"
+        >
           <t-select v-model="formEditData.batch_host_code" clearable :style="{ width: '480px' }">
             <t-option v-for="(item, index) in host_dic" :key="index" :value="index" :label="item">
               {{ item }}
@@ -156,7 +203,33 @@
             <t-option v-for="item in batchTaskTypeOptions" :key="item.value" :value="item.value" :label="`${item.label}`"></t-option>
           </t-select>
         </t-form-item>
-        <t-form-item :label="t('page.batchtask.label_batch_extra_config')" name="batch_extra_config">
+        <t-form-item
+          v-if="formEditData.batch_type === 'ipgroup'"
+          :label="t('page.batchtask.label_ip_group')"
+          name="ip_group_code"
+        >
+          <div>
+            <t-select v-model="formEditData.ip_group_code" clearable filterable :style="{ width: '480px' }">
+              <t-option
+                v-for="g in groupOptions"
+                :key="g.group_code"
+                :value="g.group_code"
+                :label="`${g.group_name} (${g.item_count})`"
+              ></t-option>
+            </t-select>
+            <a class="t-button-link" style="margin-left: 8px" @click="handleJumpIPGroup">
+              {{ t('page.batchtask.ip_group_goto_manage') }}
+            </a>
+            <div style="margin-top: 8px; font-size: 12px; color: #666">
+              {{ groupOptions.length ? t('page.batchtask.ip_group_tips') : t('page.batchtask.ip_group_empty_tips') }}
+            </div>
+          </div>
+        </t-form-item>
+        <t-form-item
+          v-if="formEditData.batch_type !== 'ipgroup'"
+          :label="t('page.batchtask.label_batch_extra_config')"
+          name="batch_extra_config"
+        >
           <div>
             <t-textarea
               v-model="formEditData.batch_extra_config"
@@ -178,14 +251,22 @@
           <t-input v-model="formEditData.batch_source" :style="{ width: '480px' }"></t-input>
         </t-form-item>
         <t-form-item :label="t('page.batchtask.label_batch_execute_method')" name="batch_execute_method">
-          <t-select v-model="formEditData.batch_execute_method" :style="{ width: '480px' }">
-            <t-option
-              v-for="item in batchExecuteMethodOptions"
-              :key="item.value"
-              :value="item.value"
-              :label="`${item.label}`"
-            ></t-option>
-          </t-select>
+          <div>
+            <t-select v-model="formEditData.batch_execute_method" :style="{ width: '480px' }">
+              <t-option
+                v-for="item in batchExecuteMethodOptions"
+                :key="item.value"
+                :value="item.value"
+                :label="`${item.label}`"
+              ></t-option>
+            </t-select>
+            <div
+              v-if="formEditData.batch_type === 'ipgroup' && formEditData.batch_execute_method === 'overwrite'"
+              style="margin-top: 8px; font-size: 12px; color: #666"
+            >
+              {{ t('page.batchtask.ip_group_overwrite_tips') }}
+            </div>
+          </div>
         </t-form-item>
         <t-form-item :label="t('page.batchtask.label_batch_trigger_type')" name="batch_trigger_type">
           <t-select v-model="formEditData.batch_trigger_type" :style="{ width: '480px' }">
@@ -221,6 +302,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRoute, useRouter } from 'vue-router';
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next';
 import type { FormProps, PageInfo, TableProps } from 'tdesign-vue-next';
 
@@ -232,9 +314,12 @@ import {
   batchTaskManualApi,
 } from '@/apis/batchtask';
 import { allhost } from '@/apis/host';
+import { wafIPGroupOptionsApi } from '@/apis/ipgroup';
 import { getOnlineUrl } from '@/utils/usuallytool';
 
 const { t } = useI18n();
+const route = useRoute();
+const router = useRouter();
 
 const INITIAL_DATA = {
   batch_task_name: '',
@@ -245,6 +330,8 @@ const INITIAL_DATA = {
   batch_execute_method: 'append',
   batch_trigger_type: 'cron',
   batch_extra_config: '{}',
+  // 仅表单内部使用：IP组任务的目标组，提交时序列化进 batch_extra_config.group_code
+  ip_group_code: '',
   remark: '',
 };
 
@@ -254,44 +341,64 @@ const confirmVisible = ref(false);
 const formData = ref<Record<string, any>>({ ...INITIAL_DATA });
 const formEditData = ref<Record<string, any>>({ ...INITIAL_DATA });
 
-const rules: FormProps['rules'] = {
-  batch_host_code: [
-    { required: true, message: t('common.select_placeholder') + t('page.batchtask.label_website'), type: 'error' },
-  ],
-  batch_task_name: [
-    { required: true, message: t('common.select_placeholder') + t('page.batchtask.label_batch_task_name'), type: 'error' },
-  ],
-  batch_type: [
-    { required: true, message: t('common.select_placeholder') + t('page.batchtask.label_batch_type'), type: 'error' },
-  ],
-  batch_extra_config: [
-    {
-      validator: (val: string) => {
-        if (!val) return true;
-        try {
-          JSON.parse(val);
-          return true;
-        } catch (e) {
-          return false;
-        }
+// 表单校验规则工厂。
+// 新增与编辑是两份独立的表单数据，而「网站/目标IP组」的必填与否取决于各自的 batch_type，
+// 所以要按表单分别生成一套规则——共用一套会拿新增表单的类型去校验编辑表单。
+function buildRules(getForm: () => Record<string, any>): FormProps['rules'] {
+  return {
+    // IP组是租户级资源、不绑定网站，这类任务不校验网站
+    batch_host_code: [
+      {
+        validator: (val: string) => getForm().batch_type === 'ipgroup' || !!val,
+        message: t('common.select_placeholder') + t('page.batchtask.label_website'),
+        type: 'error',
       },
-      message: '请输入有效的JSON格式',
-      type: 'error',
-    },
-  ],
-  batch_source_type: [
-    { required: true, message: t('common.select_placeholder') + t('page.batchtask.label_batch_source_type'), type: 'error' },
-  ],
-  batch_source: [
-    { required: true, message: t('common.select_placeholder') + t('page.batchtask.label_batch_source'), type: 'error' },
-  ],
-  batch_execute_method: [
-    { required: true, message: t('common.select_placeholder') + t('page.batchtask.label_batch_execute_method'), type: 'error' },
-  ],
-  batch_trigger_type: [
-    { required: true, message: t('common.select_placeholder') + t('page.batchtask.label_batch_trigger_type'), type: 'error' },
-  ],
-};
+    ],
+    ip_group_code: [
+      {
+        validator: (val: string) => getForm().batch_type !== 'ipgroup' || !!val,
+        message: t('common.select_placeholder') + t('page.batchtask.label_ip_group'),
+        type: 'error',
+      },
+    ],
+    batch_task_name: [
+      { required: true, message: t('common.select_placeholder') + t('page.batchtask.label_batch_task_name'), type: 'error' },
+    ],
+    batch_type: [
+      { required: true, message: t('common.select_placeholder') + t('page.batchtask.label_batch_type'), type: 'error' },
+    ],
+    batch_extra_config: [
+      {
+        validator: (val: string) => {
+          if (!val) return true;
+          try {
+            JSON.parse(val);
+            return true;
+          } catch (e) {
+            return false;
+          }
+        },
+        message: '请输入有效的JSON格式',
+        type: 'error',
+      },
+    ],
+    batch_source_type: [
+      { required: true, message: t('common.select_placeholder') + t('page.batchtask.label_batch_source_type'), type: 'error' },
+    ],
+    batch_source: [
+      { required: true, message: t('common.select_placeholder') + t('page.batchtask.label_batch_source'), type: 'error' },
+    ],
+    batch_execute_method: [
+      { required: true, message: t('common.select_placeholder') + t('page.batchtask.label_batch_execute_method'), type: 'error' },
+    ],
+    batch_trigger_type: [
+      { required: true, message: t('common.select_placeholder') + t('page.batchtask.label_batch_trigger_type'), type: 'error' },
+    ],
+  };
+}
+
+const rules = buildRules(() => formData.value);
+const editRules = buildRules(() => formEditData.value);
 
 const dataLoading = ref(false);
 const data = ref<Record<string, any>[]>([]);
@@ -300,6 +407,8 @@ const rowKey = 'id';
 const deleteIdx = ref<string | number>(-1);
 const host_dic = reactive<Record<string, string>>({});
 const default_host_code = ref('');
+// IP组下拉选项
+const groupOptions = ref<Record<string, any>[]>([]);
 
 const pagination = reactive({
   total: 0,
@@ -315,6 +424,8 @@ const searchformData = reactive({
 const batchTypeConfigs: Record<string, { template: Record<string, any>; description: string }> = {
   ipallow: { template: {}, description: '无' },
   ipdeny: { template: {}, description: '无' },
+  // 目标组由上方的「目标IP组」下拉维护，这里不给模板，避免覆盖已选中的组
+  ipgroup: { template: {}, description: '无' },
   sensitive: {
     template: {
       check_direction: 'out',
@@ -329,6 +440,7 @@ const batchTypeConfigs: Record<string, { template: Record<string, any>; descript
 const batchTaskTypeOptions = computed(() => [
   { label: t('page.batchtask.batch_type.add_ipallow'), value: 'ipallow' },
   { label: t('page.batchtask.batch_type.add_ipdeny'), value: 'ipdeny' },
+  { label: t('page.batchtask.batch_type.add_ipgroup'), value: 'ipgroup' },
   { label: t('page.batchtask.batch_type.add_sensitive'), value: 'sensitive' },
 ]);
 
@@ -387,7 +499,65 @@ onMounted(() => {
   loadHostList().then(() => {
     getList();
   });
+  loadGroupOptions();
+  // 从IP组页面「定时批量导入」跳过来时，直接打开新增弹窗并预选好目标组
+  const presetGroup = route.query.ip_group_code as string;
+  if (presetGroup) {
+    handleAdd();
+    formData.value.batch_type = 'ipgroup';
+    formData.value.ip_group_code = presetGroup;
+  }
 });
+
+function loadGroupOptions() {
+  wafIPGroupOptionsApi()
+    .then((res) => {
+      if (res.code === 0) {
+        groupOptions.value = res.data ?? [];
+      }
+    })
+    .catch((e: Error) => {
+      console.log(e);
+    });
+}
+
+// 从额外配置JSON里取出 group_code，配置非法时当作未配置
+function extractGroupCode(extraConfig: string) {
+  if (!extraConfig) {
+    return '';
+  }
+  try {
+    return JSON.parse(extraConfig).group_code || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+// 列表里IP组任务显示「组名(条目数)」；组已被删时退回显示短码
+function groupLabelOfTask(row: Record<string, any>) {
+  const code = extractGroupCode(row.batch_extra_config);
+  if (!code) {
+    return '-';
+  }
+  const g = groupOptions.value.find((x) => x.group_code === code);
+  return g ? `${g.group_name} (${g.item_count})` : code;
+}
+
+function handleJumpIPGroup() {
+  router.push({ name: 'WafIpGroup' });
+}
+
+// 把表单内部的 ip_group_code 落成后端认识的 batch_extra_config.group_code，
+// 并去掉只在前端存在的字段；IP组任务不绑定网站，顺手把网站清空避免误导。
+function buildSubmitData(form: Record<string, any>) {
+  const payload = { ...form };
+  if (payload.batch_type === 'ipgroup') {
+    payload.batch_extra_config = JSON.stringify({ group_code: payload.ip_group_code || '' });
+    payload.batch_host_code = '';
+  }
+  delete payload.ip_group_code;
+  return payload;
+}
 
 // 当任务类型改变时，自动填充默认配置
 function onBatchTypeChange(value: any) {
@@ -471,7 +641,7 @@ function handleAdd() {
 
 const onSubmit: FormProps['onSubmit'] = ({ validateResult }) => {
   if (validateResult === true) {
-    batchTaskAddApi({ ...formData.value }).then((res) => {
+    batchTaskAddApi(buildSubmitData(formData.value)).then((res) => {
       if (res.code === 0) {
         getList();
         MessagePlugin.success('添加成功');
@@ -484,13 +654,17 @@ const onSubmit: FormProps['onSubmit'] = ({ validateResult }) => {
 };
 
 function handleClickEdit(slotProps: { row: Record<string, any> }) {
-  formEditData.value = { ...slotProps.row };
+  formEditData.value = {
+    ...slotProps.row,
+    // 回填目标IP组：库里存的是 batch_extra_config 里的 group_code
+    ip_group_code: extractGroupCode(slotProps.row.batch_extra_config),
+  };
   editFormVisible.value = true;
 }
 
 const onSubmitEdit: FormProps['onSubmit'] = ({ validateResult }) => {
   if (validateResult === true) {
-    batchTaskEditApi({ ...formEditData.value }).then((res) => {
+    batchTaskEditApi(buildSubmitData(formEditData.value)).then((res) => {
       if (res.code === 0) {
         getList();
         MessagePlugin.success('编辑成功');
