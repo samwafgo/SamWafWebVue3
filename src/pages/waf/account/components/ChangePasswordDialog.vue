@@ -9,11 +9,13 @@
     :close-on-esc-keydown="!forced"
   >
     <t-alert v-if="forced && reason" theme="warning" :message="reason" :style="{ marginBottom: '12px' }" />
-    <t-form :data="formData" :rules="rules" :label-width="120" @submit="onSubmit">
+    <!-- autocomplete 关掉：否则浏览器会把保存的登录口令自动填进三个密码框 -->
+    <t-form :data="formData" :rules="rules" :label-width="120" autocomplete="off" @submit="onSubmit">
       <t-form-item v-if="!hideOld" :label="t('page.account.old_password')" name="old_password">
         <t-input
           v-model="formData.old_password"
           type="password"
+          autocomplete="new-password"
           :style="{ width: '380px' }"
           :placeholder="t('common.placeholder') + t('page.account.old_password')"
         />
@@ -22,6 +24,7 @@
         <t-input
           v-model="formData.new_password"
           type="password"
+          autocomplete="new-password"
           :style="{ width: '380px' }"
           :placeholder="t('common.placeholder') + t('page.account.new_password')"
         />
@@ -30,6 +33,7 @@
         <t-input
           v-model="formData.new_password2"
           type="password"
+          autocomplete="new-password"
           :style="{ width: '380px' }"
           :placeholder="t('common.placeholder') + t('page.account.confirm_password')"
         />

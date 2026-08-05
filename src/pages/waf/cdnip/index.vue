@@ -46,7 +46,8 @@
         </ol>
       </div>
       <t-alert theme="warning" :message="t('page.cdnip.credential_tips')" style="margin-bottom: 12px" />
-      <t-form :data="credForm" :label-width="150">
+      <!-- autocomplete 关掉：AccessKey 文本框 + 密钥密码框会被浏览器当成登录表单，填进 admin 口令 -->
+      <t-form :data="credForm" :label-width="150" autocomplete="off">
         <!-- EdgeOne：中国站 / 国际站 二选一(账号与密钥各自独立、接口域名也不同) -->
         <t-form-item v-if="credProvider === 'edgeone'" :label="t('page.cdnip.eo_edition')" name="edition">
           <div>
@@ -62,6 +63,7 @@
             <t-input
               v-model="credForm.secret_id"
               :style="{ width: '420px' }"
+              autocomplete="off"
               :placeholder="credHasCredential ? t('page.cdnip.secret_keep') : credSecretIdPlaceholder"
             />
             <div class="form-item-tips">{{ credSecretTips }}</div>
@@ -71,6 +73,7 @@
           <t-input
             v-model="credForm.secret_key"
             type="password"
+            autocomplete="new-password"
             :style="{ width: '420px' }"
             :placeholder="credHasCredential ? t('page.cdnip.secret_keep') : credSecretKeyPlaceholder"
           />

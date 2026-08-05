@@ -42,11 +42,14 @@
 
     <!-- 新建账号弹窗 -->
     <t-dialog v-model:visible="addFormVisible" :header="t('page.account.create_account')" :width="680" :footer="false">
-      <t-form ref="addForm" :data="formData" :rules="rules" :label-width="150" @submit="onSubmit">
+      <!-- autocomplete 必须显式关掉：浏览器看到「文本框 + 紧跟着的密码框」就当成登录表单，
+           会把保存的管理端 admin 账号密码填进来。Chrome 只认 new-password（off 对密码框无效）。 -->
+      <t-form ref="addForm" :data="formData" :rules="rules" :label-width="150" autocomplete="off" @submit="onSubmit">
         <t-form-item :label="t('page.account.login_account_label')" name="login_account">
           <t-input
             v-model="formData.login_account"
             :style="{ width: '480px' }"
+            autocomplete="off"
             :placeholder="t('common.placeholder') + t('page.account.login_account_label')"
           ></t-input>
         </t-form-item>
@@ -62,6 +65,7 @@
             v-model="formData.login_password"
             :style="{ width: '480px' }"
             type="password"
+            autocomplete="new-password"
             :placeholder="t('common.placeholder') + t('page.account.login_password')"
           ></t-input>
         </t-form-item>
@@ -135,6 +139,7 @@
           <t-input
             v-model="formResetPwdData.login_account"
             :style="{ width: '480px' }"
+            autocomplete="off"
             :placeholder="t('common.placeholder') + t('page.account.login_account_label')"
           ></t-input>
         </t-form-item>
@@ -143,6 +148,7 @@
             v-model="formResetPwdData.login_super_password"
             :style="{ width: '480px' }"
             type="password"
+            autocomplete="new-password"
             :placeholder="t('common.placeholder') + t('page.account.super_admin_password')"
           ></t-input>
         </t-form-item>
@@ -151,6 +157,7 @@
             v-model="formResetPwdData.login_new_password"
             :style="{ width: '480px' }"
             type="password"
+            autocomplete="new-password"
             :placeholder="t('common.placeholder') + t('page.account.new_password')"
           ></t-input>
         </t-form-item>
@@ -159,6 +166,7 @@
             v-model="formResetPwdData.login_new_password2"
             :style="{ width: '480px' }"
             type="password"
+            autocomplete="new-password"
             :placeholder="t('common.placeholder') + t('page.account.confirm_password')"
           ></t-input>
         </t-form-item>

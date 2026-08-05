@@ -17,6 +17,7 @@
                 <t-option value="email" :label="t('page.notify_channel.type_email')"></t-option>
                 <t-option value="serverchan" :label="t('page.notify_channel.type_serverchan')"></t-option>
                 <t-option value="wechatwork" :label="t('page.notify_channel.type_wechatwork')"></t-option>
+                <t-option value="webhook" :label="t('page.notify_channel.type_webhook')"></t-option>
               </t-select>
             </t-form-item>
             <t-form-item>
@@ -43,6 +44,7 @@
             <t-tag v-else-if="row.type === 'email'" theme="warning">{{ t('page.notify_channel.type_email') }}</t-tag>
             <t-tag v-else-if="row.type === 'serverchan'" theme="danger">{{ t('page.notify_channel.type_serverchan') }}</t-tag>
             <t-tag v-else-if="row.type === 'wechatwork'" theme="primary">{{ t('page.notify_channel.type_wechatwork') }}</t-tag>
+            <t-tag v-else-if="row.type === 'webhook'" theme="success">{{ t('page.notify_channel.type_webhook') }}</t-tag>
             <t-tag v-else theme="default">{{ row.type }}</t-tag>
           </template>
           <template #status="{ row }">
@@ -59,9 +61,19 @@
 
     <!-- 添加对话框 -->
     <t-dialog v-model:visible="addFormVisible" :header="t('common.new')" :width="680" :footer="false">
-      <t-form ref="addForm" :data="formData" :rules="rules" :label-width="120" @submit="onSubmit">
+      <!-- autocomplete 必须显式关掉。
+           浏览器看到「文本框 + 紧跟着的密码框」就认定这是登录表单，会把保存的
+           **管理端 admin 账号密码**填进渠道名称与密钥；用户不留神点了确定，
+           就把管理员口令当成机器人密钥存进了库。
+           Chrome 只认 new-password（off 对密码框无效），所以两个都得给。 -->
+      <t-form ref="addForm" :data="formData" :rules="rules" :label-width="120" autocomplete="off" @submit="onSubmit">
         <t-form-item :label="t('page.notify_channel.label_name')" name="name">
-          <t-input v-model="formData.name" :style="{ width: '480px' }" :placeholder="t('page.notify_channel.name_placeholder')"></t-input>
+          <t-input
+            v-model="formData.name"
+            :style="{ width: '480px' }"
+            :placeholder="t('page.notify_channel.name_placeholder')"
+            autocomplete="off"
+          ></t-input>
         </t-form-item>
         <t-form-item :label="t('page.notify_channel.label_type')" name="type">
           <t-select v-model="formData.type" :style="{ width: '480px' }" @change="handleTypeChange">
@@ -70,8 +82,12 @@
             <t-option value="email" :label="t('page.notify_channel.type_email')"></t-option>
             <t-option value="serverchan" :label="t('page.notify_channel.type_serverchan')"></t-option>
             <t-option value="wechatwork" :label="t('page.notify_channel.type_wechatwork')"></t-option>
+            <t-option value="webhook" :label="t('page.notify_channel.type_webhook')"></t-option>
           </t-select>
         </t-form-item>
+
+        <!-- 通用 Webhook 配置 -->
+        <webhook-config v-if="formData.type === 'webhook'" :form="formData" />
 
         <!-- 钉钉、飞书和企业微信配置 -->
         <template v-if="formData.type === 'dingtalk' || formData.type === 'feishu' || formData.type === 'wechatwork'">
@@ -87,6 +103,7 @@
               v-model="formData.secret"
               :style="{ width: '480px' }"
               type="password"
+              autocomplete="new-password"
               :placeholder="t('page.notify_channel.secret_placeholder')"
             ></t-input>
           </t-form-item>
@@ -160,6 +177,7 @@
             <t-input
               v-model="formData.email_username"
               :style="{ width: '480px' }"
+              autocomplete="off"
               :placeholder="t('page.notify_channel.email_username_placeholder')"
             ></t-input>
           </t-form-item>
@@ -168,6 +186,7 @@
               v-model="formData.email_password"
               :style="{ width: '480px' }"
               type="password"
+              autocomplete="new-password"
               :placeholder="t('page.notify_channel.email_password_placeholder')"
             ></t-input>
           </t-form-item>
@@ -235,9 +254,10 @@
 
     <!-- 编辑对话框 -->
     <t-dialog v-model:visible="editFormVisible" :header="t('common.edit')" :width="680" :footer="false">
-      <t-form ref="editForm" :data="formEditData" :rules="rules" :label-width="120" @submit="onSubmitEdit">
+      <!-- autocomplete 关闭原因见新增弹窗上方注释 -->
+      <t-form ref="editForm" :data="formEditData" :rules="rules" :label-width="120" autocomplete="off" @submit="onSubmitEdit">
         <t-form-item :label="t('page.notify_channel.label_name')" name="name">
-          <t-input v-model="formEditData.name" :style="{ width: '480px' }"></t-input>
+          <t-input v-model="formEditData.name" :style="{ width: '480px' }" autocomplete="off"></t-input>
         </t-form-item>
         <t-form-item :label="t('page.notify_channel.label_type')" name="type">
           <t-select v-model="formEditData.type" :style="{ width: '480px' }" @change="handleEditTypeChange">
@@ -246,8 +266,12 @@
             <t-option value="email" :label="t('page.notify_channel.type_email')"></t-option>
             <t-option value="serverchan" :label="t('page.notify_channel.type_serverchan')"></t-option>
             <t-option value="wechatwork" :label="t('page.notify_channel.type_wechatwork')"></t-option>
+            <t-option value="webhook" :label="t('page.notify_channel.type_webhook')"></t-option>
           </t-select>
         </t-form-item>
+
+        <!-- 通用 Webhook 配置 -->
+        <webhook-config v-if="formEditData.type === 'webhook'" :form="formEditData" />
 
         <!-- 钉钉、飞书和企业微信配置 -->
         <template v-if="formEditData.type === 'dingtalk' || formEditData.type === 'feishu' || formEditData.type === 'wechatwork'">
@@ -255,7 +279,7 @@
             <t-input v-model="formEditData.webhook_url" :style="{ width: '480px' }"></t-input>
           </t-form-item>
           <t-form-item v-if="formEditData.type !== 'wechatwork'" :label="t('page.notify_channel.label_secret')" name="secret">
-            <t-input v-model="formEditData.secret" :style="{ width: '480px' }" type="password"></t-input>
+            <t-input v-model="formEditData.secret" :style="{ width: '480px' }" type="password" autocomplete="new-password"></t-input>
           </t-form-item>
           <t-alert v-if="formEditData.type === 'wechatwork'" theme="info" style="margin-top: 12px">
             <div style="line-height: 1.8">
@@ -316,10 +340,10 @@
             <t-input v-model="formEditData.email_smtp_port" :style="{ width: '480px' }"></t-input>
           </t-form-item>
           <t-form-item :label="t('page.notify_channel.email_username')" name="email_username">
-            <t-input v-model="formEditData.email_username" :style="{ width: '480px' }"></t-input>
+            <t-input v-model="formEditData.email_username" :style="{ width: '480px' }" autocomplete="off"></t-input>
           </t-form-item>
           <t-form-item :label="t('page.notify_channel.email_password')" name="email_password">
-            <t-input v-model="formEditData.email_password" :style="{ width: '480px' }" type="password"></t-input>
+            <t-input v-model="formEditData.email_password" :style="{ width: '480px' }" type="password" autocomplete="new-password"></t-input>
           </t-form-item>
           <t-form-item :label="t('page.notify_channel.email_from')" name="email_from">
             <t-input v-model="formEditData.email_from" :style="{ width: '480px' }"></t-input>
@@ -397,6 +421,9 @@ import {
   testNotifyChannel,
 } from '@/apis/notify_channel';
 
+import WebhookConfig from './components/WebhookConfig.vue';
+import { buildWebhookConfig } from './webhook_presets';
+
 const { t } = useI18n();
 
 // 常见邮箱配置参考块（添加/编辑弹窗共用）
@@ -467,7 +494,16 @@ const INITIAL_DATA = {
   email_to: '',
   email_ssl_mode: 'none',
   email_skip_verify: false,
+  // 通用Webhook配置字段
+  webhook_preset: 'custom',
+  webhook_method: 'POST',
+  webhook_content_type: 'application/json',
+  webhook_headers: [] as Array<{ key: string; value: string }>,
+  webhook_body_template: '',
 };
+
+// 每次都要新建一份：webhook_headers 是数组，浅拷贝会让新增和编辑两个表单共用同一个数组
+const newFormData = () => ({ ...INITIAL_DATA, webhook_headers: [] as Array<{ key: string; value: string }> });
 
 const data = ref<Record<string, any>[]>([]);
 const dataLoading = ref(false);
@@ -497,8 +533,8 @@ const searchformData = reactive({
   type: '',
 });
 
-const formData = ref<Record<string, any>>({ ...INITIAL_DATA });
-const formEditData = ref<Record<string, any>>({ ...INITIAL_DATA });
+const formData = ref<Record<string, any>>(newFormData());
+const formEditData = ref<Record<string, any>>(newFormData());
 
 const rules: FormProps['rules'] = {
   name: [{ required: true, message: t('common.required'), type: 'error' }],
@@ -539,12 +575,28 @@ function rehandlePageChange(pageInfo: PageInfo) {
 }
 
 function handleAdd() {
-  formData.value = { ...INITIAL_DATA };
+  formData.value = newFormData();
   addFormVisible.value = true;
 }
 
 function handleClickEdit(e: { row: Record<string, any> }) {
-  const row = { ...e.row };
+  const row: Record<string, any> = { ...newFormData(), ...e.row };
+  // 如果是通用Webhook类型，解析config_json
+  if (row.type === 'webhook' && row.config_json) {
+    try {
+      const config = JSON.parse(row.config_json);
+      row.webhook_url = config.url || row.webhook_url || '';
+      row.webhook_method = config.method || 'POST';
+      row.webhook_content_type = config.content_type || 'application/json';
+      row.webhook_headers = Array.isArray(config.headers)
+        ? config.headers.map((h: any) => ({ key: h.key || '', value: h.value || '' }))
+        : [];
+      row.webhook_body_template = config.body_template || '';
+      row.webhook_preset = 'custom';
+    } catch (err) {
+      console.error('解析Webhook配置失败', err);
+    }
+  }
   // 如果是邮件类型，解析config_json
   if (row.type === 'email' && row.config_json) {
     try {
@@ -625,6 +677,12 @@ function normalizeSubmitData(source: Record<string, any>) {
     submitData.webhook_url = '';
     submitData.secret = '';
     submitData.config_json = '';
+  } else if (submitData.type === 'webhook') {
+    // 地址同时写进 webhook_url 列，列表页那一列才有内容可展示
+    submitData.webhook_url = (submitData.webhook_url || '').trim();
+    submitData.secret = '';
+    submitData.access_token = '';
+    submitData.config_json = buildWebhookConfig(submitData);
   }
   return submitData;
 }

@@ -216,6 +216,7 @@ const channelTypes: { type: string; name: string; theme: 'primary' | 'success' |
   { type: 'email', name: '邮箱', theme: 'warning' },
   { type: 'serverchan', name: 'Server酱', theme: 'danger' },
   { type: 'wechatwork', name: '企业微信', theme: 'primary' },
+  { type: 'webhook', name: '自定义Webhook', theme: 'success' },
 ];
 
 const messageTypes = computed(() => [

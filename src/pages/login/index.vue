@@ -34,6 +34,7 @@
             v-model="formData.secretCode"
             size="large"
             type="password"
+            autocomplete="one-time-code"
             clearable
             :placeholder="t('login.input_secret_code_placeholder')"
           >
