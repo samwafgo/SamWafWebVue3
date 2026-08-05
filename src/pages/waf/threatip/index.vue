@@ -41,11 +41,22 @@
             <t-tag v-if="row.enable === 1" theme="success" variant="light">{{ t('page.threatip.enabled') }}</t-tag>
             <t-tag v-else theme="default" variant="light">{{ t('page.threatip.disabled') }}</t-tag>
           </template>
+          <template #last_status="{ row }">
+            <t-tag v-if="row.syncing" theme="warning" variant="light">
+              {{ t('page.threatip.syncing') }}{{ syncElapsedText(row) }}
+            </t-tag>
+            <span v-else>{{ row.last_status }}</span>
+          </template>
           <template #last_sync_at="{ row }">
             <span>{{ formatTs(row.last_sync_at) }}</span>
           </template>
           <template #op="slotProps">
-            <a class="t-button-link" @click="handleSync(slotProps)">{{ t('page.threatip.sync') }}</a>
+            <a
+              v-if="slotProps.row.syncing"
+              class="t-button-link"
+              :style="{ color: '#bbb', cursor: 'not-allowed' }"
+            >{{ t('page.threatip.sync') }}</a>
+            <a v-else class="t-button-link" @click="handleSync(slotProps)">{{ t('page.threatip.sync') }}</a>
             <a class="t-button-link" @click="handleClickEdit(slotProps)">{{ t('common.edit') }}</a>
             <a class="t-button-link" @click="handleClickDelete(slotProps)">{{ t('common.delete') }}</a>
           </template>
@@ -169,7 +180,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin, type FormProps, type PageInfo, type TableProps } from 'tdesign-vue-next';
 import {
@@ -271,8 +282,16 @@ function formatTs(ts: number) {
   return d.toLocaleString();
 }
 
-function getList() {
-  dataLoading.value = true;
+// 同步是后台异步跑的(拉取最长 2 分钟)，点完立刻刷新必然看不到结果，
+// 所以这里用定时轮询，直到没有渠道处于 syncing 或达到上限为止。
+const syncPollTimer = ref<ReturnType<typeof setInterval> | null>(null);
+const syncPollLeft = ref(0);
+const syncPollDone = ref(0);
+const syncPollSawSyncing = ref(false);
+
+// silent=true 用于轮询刷新：不显示表格 loading，避免每 3 秒闪一次
+function getList(silent = false) {
+  if (!silent) dataLoading.value = true;
   wafThreatIPListApi({
     pageSize: pagination.pageSize,
     pageIndex: pagination.current,
@@ -282,14 +301,56 @@ function getList() {
       if (res.code === 0) {
         data.value = res.data.list ?? [];
         pagination.total = res.data.total;
+        // 收工条件：已经观察到过"同步中"、或连轮几次都没看到，就不用再轮了。
+        // (后端是异步起的 goroutine，第一次轮询时可能还没标上 syncing，所以留几次余量)
+        if (syncPollTimer.value) {
+          const anySyncing = data.value.some((row: Record<string, any>) => row.syncing);
+          if (anySyncing) {
+            syncPollSawSyncing.value = true;
+          } else if (syncPollSawSyncing.value || syncPollDone.value >= 3) {
+            stopSyncPolling();
+          }
+        }
       }
     })
     .catch((e: Error) => {
       console.log(e);
     })
     .finally(() => {
-      dataLoading.value = false;
+      if (!silent) dataLoading.value = false;
     });
+}
+
+// 同步中已持续时长，例如 "（12s）"
+function syncElapsedText(row: Record<string, any>) {
+  if (!row.syncing || !row.sync_started_at) return '';
+  const sec = Math.max(0, Math.floor(Date.now() / 1000) - row.sync_started_at);
+  return `（${sec}s）`;
+}
+
+// 启动轮询：每 3 秒刷一次列表，最多 ~2 分钟(覆盖后端 2 分钟的拉取超时)
+function startSyncPolling() {
+  stopSyncPolling();
+  syncPollLeft.value = 40;
+  syncPollDone.value = 0;
+  syncPollSawSyncing.value = false;
+  syncPollTimer.value = setInterval(() => {
+    if (syncPollLeft.value <= 0) {
+      stopSyncPolling();
+      return;
+    }
+    syncPollLeft.value -= 1;
+    syncPollDone.value += 1;
+    getList(true);
+  }, 3000);
+}
+
+function stopSyncPolling() {
+  if (syncPollTimer.value) {
+    clearInterval(syncPollTimer.value);
+    syncPollTimer.value = null;
+  }
+  syncPollLeft.value = 0;
 }
 
 function rehandlePageChange(pageInfo: PageInfo) {
@@ -376,10 +437,12 @@ function handleSync(e: { row: Record<string, any> }) {
     .then((res) => {
       if (res.code === 0) {
         MessagePlugin.success(res.msg);
+        // 后台已经开始跑了，启动轮询把结果等出来
+        startSyncPolling();
       } else {
         MessagePlugin.warning(res.msg);
+        getList();
       }
-      getList();
     })
     .catch((err: Error) => console.log(err));
 }
@@ -421,6 +484,10 @@ function getDetail(id: string | number) {
 
 onMounted(() => {
   getList();
+});
+
+onBeforeUnmount(() => {
+  stopSyncPolling();
 });
 </script>
 
