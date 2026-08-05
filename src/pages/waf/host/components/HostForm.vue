@@ -537,6 +537,17 @@
             </template>
             <upload-security-config :upload-security-config="uploadSecurityConfigData" @update="(val: any) => (uploadSecurityConfigData = val)" />
           </t-tab-panel>
+          <t-tab-panel :value="20">
+            <template #label>
+              <user-safety-icon style="margin-right: 4px; color: #0052d9" />
+              {{ t('page.host.tab_access') }}
+            </template>
+            <access-config
+              :access-config="accessConfigData"
+              :cache-enabled="cacheConfigData && String(cacheConfigData.is_enable_cache) === '1'"
+              @update="(val: any) => (accessConfigData = val)"
+            />
+          </t-tab-panel>
           <t-tab-panel :value="15">
             <template #label>
               <swap-icon style="margin-right: 4px; color: #0052d9" />
@@ -587,6 +598,7 @@ import {
   LayersIcon,
   SettingIcon,
   UserPasswordIcon,
+  UserSafetyIcon,
   ArrowUpCircleIcon,
   ArrowDownCircleIcon,
   ViewListIcon,
@@ -605,6 +617,7 @@ import CustomResponseHeadersConfig from './CustomResponseHeadersConfig.vue';
 import ResponseCompressConfig from './ResponseCompressConfig.vue';
 import CookieSecurityConfig from './CookieSecurityConfig.vue';
 import CsrfConfig from './CsrfConfig.vue';
+import AccessConfig from './AccessConfig.vue';
 import TamperConfig from './TamperConfig.vue';
 import UploadSecurityConfig from './UploadSecurityConfig.vue';
 import PathRuleConfig from './PathRuleConfig.vue';
@@ -622,6 +635,7 @@ import {
   INITIAL_RESPONSE_COMPRESS,
   INITIAL_COOKIE_SECURITY,
   INITIAL_CSRF,
+  INITIAL_ACCESS,
   INITIAL_TAMPER,
   INITIAL_UPLOAD_SECURITY,
   DEFAULT_STATIC_SECURITY_HEADERS,
@@ -713,6 +727,7 @@ const customResponseHeadersConfigData = ref<Record<string, any>>({ ...INITIAL_CU
 const responseCompressConfigData = ref<Record<string, any>>({ ...INITIAL_RESPONSE_COMPRESS });
 const cookieSecurityConfigData = ref<Record<string, any>>({ ...INITIAL_COOKIE_SECURITY });
 const csrfConfigData = ref<Record<string, any>>({ ...INITIAL_CSRF, protect_methods: [...INITIAL_CSRF.protect_methods] });
+const accessConfigData = ref<Record<string, any>>({ ...INITIAL_ACCESS });
 const tamperConfigData = ref<Record<string, any>>({ ...INITIAL_TAMPER });
 const uploadSecurityConfigData = ref<Record<string, any>>({ ...INITIAL_UPLOAD_SECURITY });
 const activeTab = ref<number>(1); // 当前激活的配置 Tab（受控，供防御总览开关「配置详情」跳转）
@@ -1131,6 +1146,27 @@ watch(
       csrfConfigData.value = { ...INITIAL_CSRF, protect_methods: [...INITIAL_CSRF.protect_methods] };
     }
 
+    // 解析统一访问认证(Access 模式)配置
+    // 空值必须落在 mode="0"(继承全局)：存量站点的 access_json 是空的，
+    // 若误落成强制开启，用户升级后整站会立刻要求登录。
+    if (fd.access_json && fd.access_json !== '') {
+      try {
+        const ac = JSON.parse(fd.access_json);
+        accessConfigData.value = {
+          mode: String(ac.mode !== undefined ? ac.mode : 0),
+          exclude_paths: ac.exclude_paths != null ? ac.exclude_paths : '',
+          require_otp: String(ac.require_otp !== undefined ? ac.require_otp : 0),
+          unauth_action: ac.unauth_action != null ? ac.unauth_action : '',
+          allow_ip_group_code: ac.allow_ip_group_code != null ? ac.allow_ip_group_code : '',
+        };
+      } catch (e) {
+        console.error('解析access_json失败', e);
+        accessConfigData.value = { ...INITIAL_ACCESS };
+      }
+    } else {
+      accessConfigData.value = { ...INITIAL_ACCESS };
+    }
+
     // 解析网页防篡改配置
     if (fd.tamper_json && fd.tamper_json !== '') {
       try {
@@ -1476,6 +1512,15 @@ const onSubmit: FormProps['onSubmit'] = ({ validateResult, firstError }) => {
       allowed_origins: csrfConfigData.value.allowed_origins || '',
       allow_empty_ref: parseInt(csrfConfigData.value.allow_empty_ref, 10) || 0,
       exclude_paths: csrfConfigData.value.exclude_paths || '',
+    });
+
+    // 处理统一访问认证(Access 模式)配置
+    postdata.access_json = JSON.stringify({
+      mode: parseInt(accessConfigData.value.mode, 10) || 0,
+      exclude_paths: accessConfigData.value.exclude_paths || '',
+      require_otp: parseInt(accessConfigData.value.require_otp, 10) || 0,
+      unauth_action: accessConfigData.value.unauth_action || '',
+      allow_ip_group_code: accessConfigData.value.allow_ip_group_code || '',
     });
 
     // 处理网页防篡改配置
