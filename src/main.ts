@@ -8,5 +8,8 @@ import router from './router';
 import pinia from './store';
 import i18n from './i18n';
 import './permission';
+import { setupDialogOverlayGuard } from './utils/dialogOverlayGuard';
+
+setupDialogOverlayGuard();
 
 createApp(App).use(TDesign).use(pinia).use(router).use(i18n).mount('#app');
