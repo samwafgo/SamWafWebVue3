@@ -2,8 +2,13 @@
   <div>
     <t-card class="list-card-container">
       <div class="page-header">
-        <h3>{{ t('page.notify_subscription.page_title') }}</h3>
-        <p class="page-desc">{{ t('page.notify_subscription.alert_message') }}</p>
+        <div class="page-header-main">
+          <h3>{{ t('page.notify_subscription.page_title') }}</h3>
+          <p class="page-desc">{{ t('page.notify_subscription.alert_message') }}</p>
+        </div>
+        <t-button variant="outline" @click="globalDialogVisible = true">
+          <setting-icon /> {{ t('page.notify_subscription.button_global_config') }}
+        </t-button>
       </div>
 
       <t-loading :loading="dataLoading" size="large">
@@ -32,6 +37,9 @@
                   </t-dropdown-item>
                   <t-dropdown-item @click="handleBatchDisable(ct.type)">
                     <close-circle-icon /> {{ t('page.notify_subscription.batch_action_disable') }}
+                  </t-dropdown-item>
+                  <t-dropdown-item @click="handleBatchConfig(ct.type)">
+                    <setting-icon /> {{ t('page.notify_subscription.batch_action_config') }}
                   </t-dropdown-item>
                   <t-dropdown-item @click="handleBatchDelete(ct.type)">
                     <delete-icon /> {{ t('page.notify_subscription.batch_action_delete') }}
@@ -69,7 +77,14 @@
                       <span v-if="channel.subscription.recipients" class="channel-detail">{{ channel.subscription.recipients }}</span>
                       <a class="edit-link-inline" @click="handleEditRecipients(row.messageType, channel)">修改</a>
                     </template>
+                    <!-- 配置摘要：只显示改过的项，一眼看出哪个格子被单独配过 -->
+                    <span class="config-summary" :title="configSummary(channel.subscription)">
+                      {{ configSummary(channel.subscription) }}
+                    </span>
                   </div>
+                  <t-tooltip :content="t('page.notify_subscription.config_title')">
+                    <setting-icon size="16px" class="config-icon-inline" @click="handleOpenConfig(row.messageType, channel)" />
+                  </t-tooltip>
                   <close-circle-filled-icon
                     size="16px"
                     class="delete-icon-inline"
@@ -82,6 +97,27 @@
         </t-table>
       </t-loading>
     </t-card>
+
+    <!-- 单个订阅的精细化配置（频控/模板/过滤/测试） -->
+    <config-drawer
+      v-model:visible="configDrawerVisible"
+      :subscription="configSubscription"
+      :channel-name="configChannelName"
+      :channel-type="configChannelType"
+      :message-type-name="configMessageTypeName"
+      @saved="loadSubscriptionList"
+    />
+
+    <!-- 按渠道类型批量套用频控配置 -->
+    <batch-config-dialog
+      v-model:visible="batchConfigVisible"
+      :channel-type="batchConfigChannelType"
+      :channel-label="batchConfigChannelName"
+      @saved="loadSubscriptionList"
+    />
+
+    <!-- 全局默认频控配置 -->
+    <global-throttle-dialog v-model:visible="globalDialogVisible" />
 
     <!-- 邮箱收件人配置对话框 -->
     <t-dialog
@@ -147,7 +183,15 @@ import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin } from 'tdesign-vue-next';
 import type { FormProps, TableProps } from 'tdesign-vue-next';
-import { AddIcon, CheckCircleIcon, CloseCircleFilledIcon, CloseCircleIcon, DeleteIcon, EllipsisIcon } from 'tdesign-icons-vue-next';
+import {
+  AddIcon,
+  CheckCircleIcon,
+  CloseCircleFilledIcon,
+  CloseCircleIcon,
+  DeleteIcon,
+  EllipsisIcon,
+  SettingIcon,
+} from 'tdesign-icons-vue-next';
 
 import {
   addNotifySubscription,
@@ -156,6 +200,9 @@ import {
   getNotifySubscriptionList,
 } from '@/apis/notify_subscription';
 import { getNotifyChannelList } from '@/apis/notify_channel';
+import BatchConfigDialog from './components/BatchConfigDialog.vue';
+import ConfigDrawer from './components/ConfigDrawer.vue';
+import GlobalThrottleDialog from './components/GlobalThrottleDialog.vue';
 
 const { t } = useI18n();
 
@@ -203,6 +250,17 @@ const batchConfirmType = ref(''); // 'delete' or 'disable'
 const batchConfirmChannelType = ref('');
 const batchConfirmChannelName = ref('');
 
+// 精细化配置（issue #822）
+const configDrawerVisible = ref(false);
+const configSubscription = ref<Record<string, any>>({});
+const configChannelName = ref('');
+const configChannelType = ref('');
+const configMessageTypeName = ref('');
+const batchConfigVisible = ref(false);
+const batchConfigChannelType = ref('');
+const batchConfigChannelName = ref('');
+const globalDialogVisible = ref(false);
+
 const tableColumns = computed<TableProps['columns']>(() => {
   const columns: any[] = [
     {
@@ -217,7 +275,7 @@ const tableColumns = computed<TableProps['columns']>(() => {
     columns.push({
       colKey: channelType.type,
       title: `${channelType.type}-title`, // 指定title slot名称
-      minWidth: 180,
+      minWidth: 200,
     });
   });
   return columns;
@@ -308,6 +366,71 @@ function getMessageTypeName(type: string) {
 function getChannelTypeName(channelType: string) {
   const found = channelTypes.find((item) => item.type === channelType);
   return found ? found.name : channelType;
+}
+
+// ===== 精细化配置（issue #822）=====
+
+function parseJSON(text: string) {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    return null;
+  }
+}
+
+// 把生效配置压成一行灰字。只列非默认项——全默认时不显示任何东西，避免噪音
+function configSummary(sub: Record<string, any> | null) {
+  if (!sub) return '';
+  const parts: string[] = [];
+  const throttle = parseJSON(sub.throttle_json) || {};
+
+  const modeMap: Record<string, string> = {
+    realtime: t('page.notify_subscription.throttle_mode_realtime'),
+    aggregate: t('page.notify_subscription.throttle_mode_aggregate'),
+    cooldown: t('page.notify_subscription.throttle_mode_cooldown'),
+  };
+  if (sub.throttle_mode && sub.throttle_mode !== 'inherit' && modeMap[sub.throttle_mode]) {
+    let modeText = modeMap[sub.throttle_mode];
+    if (sub.throttle_mode === 'aggregate' && throttle.aggregate_window_sec > 0) {
+      modeText += `${throttle.aggregate_window_sec}s`;
+    }
+    parts.push(modeText);
+  }
+  if (throttle.max_per_hour > 0) {
+    parts.push(t('page.notify_subscription.summary_limit', { count: throttle.max_per_hour }));
+  }
+  if (throttle.quiet_hours) {
+    parts.push(t('page.notify_subscription.summary_quiet'));
+  }
+  if (sub.title_template || sub.content_template) {
+    parts.push(t('page.notify_subscription.summary_custom_template'));
+  }
+  if (sub.filter_json) {
+    parts.push(t('page.notify_subscription.summary_filtered'));
+  }
+  return parts.join(' · ');
+}
+
+// 打开单个格子的配置抽屉
+function handleOpenConfig(messageType: string, channel: Record<string, any>) {
+  const subscription = getSubscription(messageType, channel.id);
+  if (!subscription) {
+    MessagePlugin.warning('订阅不存在');
+    return;
+  }
+  configSubscription.value = subscription;
+  configChannelName.value = channel.name;
+  configChannelType.value = channel.type;
+  configMessageTypeName.value = getMessageTypeName(messageType);
+  configDrawerVisible.value = true;
+}
+
+// 按渠道类型批量套用频控配置
+function handleBatchConfig(channelType: string) {
+  batchConfigChannelType.value = channelType;
+  batchConfigChannelName.value = getChannelTypeName(channelType);
+  batchConfigVisible.value = true;
 }
 
 async function onConfirmDelete() {
@@ -747,6 +870,13 @@ async function executeBatchDisable() {
 
 .page-header {
   margin-bottom: 24px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.page-header .page-header-main {
+  flex: 1;
 }
 
 .page-header h3 {
@@ -831,6 +961,26 @@ async function executeBatchDisable() {
 
 .channel-info-inline .edit-link-inline:hover {
   text-decoration: underline;
+}
+
+.channel-info-inline .config-summary {
+  font-size: 12px;
+  color: #999;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subscription-inline .config-icon-inline {
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.subscription-inline .config-icon-inline:hover {
+  color: #0052d9;
+  transform: scale(1.15);
 }
 
 .subscription-inline .delete-icon-inline {

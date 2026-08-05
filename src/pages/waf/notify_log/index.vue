@@ -22,6 +22,8 @@
               <t-select v-model="searchformData.status" clearable :style="{ width: '120px' }">
                 <t-option :value="1" :label="t('page.notify_log.status_success')"></t-option>
                 <t-option :value="0" :label="t('page.notify_log.status_failed')"></t-option>
+                <!-- 被抑制的通知也留痕，这样"为什么没收到"能直接在这里查到 -->
+                <t-option :value="2" :label="t('page.notify_log.status_suppressed')"></t-option>
               </t-select>
             </t-form-item>
             <t-form-item :label="t('page.notify_log.label_start_time')" name="start_time">
@@ -71,7 +73,15 @@
           </template>
           <template #status="{ row }">
             <t-tag v-if="row.status === 1" theme="success">{{ t('page.notify_log.status_success') }}</t-tag>
+            <t-tag v-else-if="row.status === 2" theme="warning">{{ t('page.notify_log.status_suppressed') }}</t-tag>
             <t-tag v-else theme="danger">{{ t('page.notify_log.status_failed') }}</t-tag>
+          </template>
+          <template #suppress_reason="{ row }">
+            <span v-if="row.status !== 2">-</span>
+            <span v-else>
+              {{ getSuppressReasonName(row.suppress_reason) }}
+              <t-tag v-if="row.suppress_count > 1" theme="warning" variant="light" size="small">×{{ row.suppress_count }}</t-tag>
+            </span>
           </template>
           <template #op="slotProps">
             <a class="t-button-link" @click="handleViewDetail(slotProps)">{{ t('page.notify_log.view_detail') }}</a>
@@ -106,7 +116,22 @@
         </t-form-item>
         <t-form-item :label="t('page.notify_log.label_send_status')">
           <t-tag v-if="detailData.status === 1" theme="success">{{ t('page.notify_log.status_success') }}</t-tag>
+          <t-tag v-else-if="detailData.status === 2" theme="warning">{{ t('page.notify_log.status_suppressed') }}</t-tag>
           <t-tag v-else theme="danger">{{ t('page.notify_log.status_failed') }}</t-tag>
+        </t-form-item>
+        <t-form-item v-if="detailData.status === 2" :label="t('page.notify_log.label_suppress_reason')">
+          <div>
+            <span>{{ getSuppressReasonName(detailData.suppress_reason) }}</span>
+            <div style="font-size: 12px; color: #666; margin-top: 4px">
+              {{ t('page.notify_log.label_suppress_count') }}: {{ detailData.suppress_count || 1 }} ——
+              {{ t('page.notify_log.suppress_tips') }}
+            </div>
+          </div>
+        </t-form-item>
+        <t-form-item v-if="detailData.template_used" :label="t('page.notify_log.label_template_used')">
+          <t-tag :theme="detailData.template_used === 'custom_fallback' ? 'danger' : 'default'">
+            {{ getTemplateUsedName(detailData.template_used) }}
+          </t-tag>
         </t-form-item>
         <t-form-item v-if="detailData.status === 0 && detailData.error_msg" :label="t('page.notify_log.label_error_msg')">
           <t-textarea :value="detailData.error_msg" :autosize="{ minRows: 2, maxRows: 5 }" readonly></t-textarea>
@@ -153,6 +178,7 @@ const columns = computed<TableProps['columns']>(() => [
   { title: t('page.notify_log.label_message_type'), colKey: 'message_type', width: 150 },
   { title: t('page.notify_log.label_message_title'), colKey: 'message_title', ellipsis: true, width: 200 },
   { title: t('page.notify_log.label_send_status'), colKey: 'status', width: 100 },
+  { title: t('page.notify_log.label_suppress_reason'), colKey: 'suppress_reason', width: 160 },
   { title: t('page.notify_log.label_send_time'), colKey: 'send_time', width: 180 },
   { align: 'left', fixed: 'right', width: 150, colKey: 'op', title: t('common.op') },
 ]);
@@ -223,6 +249,26 @@ function getMessageTypeName(type: string) {
     access_abnormal: t('page.notify_log.message_type_access_abnormal'),
   };
   return typeMap[type] || type;
+}
+
+// 抑制原因中文化：直接回答"为什么这条没发出去"
+function getSuppressReasonName(reason: string) {
+  const reasonMap: Record<string, string> = {
+    cooldown: t('page.notify_log.suppress_reason_cooldown'),
+    rate_limit: t('page.notify_log.suppress_reason_rate_limit'),
+    quiet_hours: t('page.notify_log.suppress_reason_quiet_hours'),
+    filter_miss: t('page.notify_log.suppress_reason_filter_miss'),
+  };
+  return reasonMap[reason] || reason || '-';
+}
+
+function getTemplateUsedName(used: string) {
+  const usedMap: Record<string, string> = {
+    default: t('page.notify_log.template_used_default'),
+    custom: t('page.notify_log.template_used_custom'),
+    custom_fallback: t('page.notify_log.template_used_fallback'),
+  };
+  return usedMap[used] || used;
 }
 
 function rehandlePageChange(pageInfo: PageInfo) {
