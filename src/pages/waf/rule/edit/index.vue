@@ -161,10 +161,17 @@
                   </t-link>
                   <t-link theme="default" hover="color" size="small" class="ai-gen-setting" @click="openGptConfig">
                     <setting-icon />
-                    <span>{{ t('page.rule.detail.gpt_config_entry') }}</span>
+                    <span>{{ t('page.gpt.config.entry') }}</span>
                   </t-link>
                 </div>
                 <div class="ai-gen-body">
+                  <!-- 没配密钥先提示，别让用户填完意图才发现生成不了 -->
+                  <div v-if="gptChecked && !gptHasToken" class="ai-gen-unset">
+                    <span>{{ t('page.rule.detail.gpt_not_configured') }}</span>
+                    <t-link theme="primary" hover="color" size="small" @click="openGptConfig">
+                      {{ t('page.gpt.unset_action') }}
+                    </t-link>
+                  </div>
                   <t-textarea v-model="aiGenIntent" :autosize="{ minRows: 2, maxRows: 4 }" :placeholder="t('page.rule.detail.ai_gen_placeholder')" />
                   <div class="ai-gen-ops">
                     <t-button theme="primary" :loading="aiGenLoading" @click="onAiGenRule">
@@ -315,54 +322,8 @@
       </div>
     </t-dialog>
 
-    <!-- GPT 参数设置弹窗 -->
-    <t-dialog v-model:visible="gptConfigDialogVisible" :header="t('page.rule.detail.gpt_config_title')" width="760px" :footer="false">
-      <t-loading :loading="gptConfigLoading" size="small">
-        <!-- autocomplete 关掉：URL/模型文本框 + Token 密码框会被浏览器当成登录表单，填进 admin 口令 -->
-        <t-form :data="gptConfig" :label-width="110" autocomplete="off" @submit.prevent>
-          <t-form-item :label="t('page.rule.detail.gpt_url')" name="gpt_url">
-            <t-input v-model="gptConfig.gpt_url" placeholder="https://api.deepseek.com" autocomplete="off" />
-          </t-form-item>
-          <t-form-item :label="t('page.rule.detail.gpt_model')" name="gpt_model">
-            <t-input v-model="gptConfig.gpt_model" placeholder="deepseek-chat" autocomplete="off" />
-          </t-form-item>
-          <t-form-item :label="t('page.rule.detail.gpt_token')" name="gpt_token">
-            <t-input
-              v-model="gptConfig.gpt_token"
-              type="password"
-              autocomplete="new-password"
-              :placeholder="gptConfig.has_token ? t('page.rule.detail.gpt_token_set_placeholder') : t('page.rule.detail.gpt_token_empty_placeholder')"
-            />
-          </t-form-item>
-        </t-form>
-        <div class="gpt-token-tip">{{ t('page.rule.detail.gpt_token_tip') }}</div>
-
-        <div class="gpt-preset-title">{{ t('page.rule.detail.gpt_preset_title') }}</div>
-        <div class="gpt-preset-list">
-          <div v-for="(p, pIndex) in gptProviders" :key="pIndex" class="gpt-preset-item">
-            <div class="gpt-preset-main">
-              <span class="gpt-preset-name">{{ p.name }}</span>
-              <span class="gpt-preset-desc">{{ gptPresetDesc(p) }}</span>
-            </div>
-            <div class="gpt-preset-url">{{ p.url }}</div>
-            <div class="gpt-preset-models">
-              <t-tag v-for="(m, mIndex) in p.models" :key="mIndex" size="small" variant="light" class="gpt-preset-model" @click="applyGptPreset(p, m)">
-                {{ m }}
-              </t-tag>
-            </div>
-            <div class="gpt-preset-ops">
-              <t-button size="small" variant="outline" @click="applyGptPreset(p)">{{ t('page.rule.detail.gpt_preset_use') }}</t-button>
-              <t-link theme="primary" hover="color" size="small" :href="p.home" target="_blank">{{ t('page.rule.detail.gpt_preset_apply_key') }}</t-link>
-            </div>
-          </div>
-        </div>
-
-        <div class="ai-prompt-ops">
-          <t-button theme="primary" :loading="gptConfigSaving" @click="saveGptConfig">{{ t('common.submit') }}</t-button>
-          <t-button variant="outline" @click="gptConfigDialogVisible = false">{{ t('common.close') }}</t-button>
-        </div>
-      </t-loading>
-    </t-dialog>
+    <!-- GPT 参数设置弹窗（与 AI 助手共用同一个组件） -->
+    <gpt-config-dialog v-model:visible="gptConfigDialogVisible" @saved="checkGptConfig" />
 
     <!-- 测试规则弹窗 -->
     <t-dialog
@@ -486,8 +447,8 @@ import {
   wafRuleAiGenApi,
   wafRuleAiPromptApi,
 } from '@/apis/rules';
-import { wafGptConfigGetApi, wafGptConfigSaveApi } from '@/apis/gpt';
-import { GPT_PROVIDERS } from '@/utils/gptProviders';
+import { wafGptConfigGetApi } from '@/apis/gpt';
+import GptConfigDialog from '@/components/gpt-config/index.vue';
 
 const { t, locale } = useI18n();
 const route = useRoute();
@@ -622,10 +583,8 @@ const aiPromptText = ref('');
 
 // GPT 参数设置弹窗
 const gptConfigDialogVisible = ref(false);
-const gptConfigLoading = ref(false);
-const gptConfigSaving = ref(false);
-const gptConfig = reactive<Record<string, any>>({ gpt_url: '', gpt_model: '', gpt_token: '', has_token: false });
-const gptProviders = GPT_PROVIDERS;
+const gptChecked = ref(false); // 是否已检测过 AI 配置
+const gptHasToken = ref(false); // AI 密钥是否已配置
 
 // AI 生成规则
 const aiGenIntent = ref('');
@@ -1046,64 +1005,23 @@ function copyAiPrompt() {
   copyExample(aiPromptText.value);
 }
 
-// 预设服务商说明（按界面语言）
-function gptPresetDesc(p: Record<string, any>) {
-  const en = String(locale.value || '').toLowerCase().indexOf('en') === 0;
-  return en ? p.en : p.zh;
+// 打开 GPT 参数设置弹窗（表单/预设都在共用组件里）
+function openGptConfig() {
+  gptConfigDialogVisible.value = true;
 }
 
-// 打开 GPT 参数设置弹窗并拉取当前配置（密钥不回传明文）
-async function openGptConfig() {
-  gptConfigDialogVisible.value = true;
-  gptConfigLoading.value = true;
-  gptConfig.gpt_token = '';
+// 检测 AI 是否已配置密钥（后端只回 has_token，不下发明文）
+async function checkGptConfig() {
   try {
     const res = await wafGptConfigGetApi();
-    if (res.code === 0 && res.data) {
-      gptConfig.gpt_url = res.data.gpt_url || '';
-      gptConfig.gpt_model = res.data.gpt_model || '';
-      gptConfig.has_token = !!res.data.has_token;
-    }
+    gptHasToken.value = !!(res && res.code === 0 && res.data && res.data.has_token);
   } catch (e) {
     console.log(e);
+    gptHasToken.value = false;
   } finally {
-    gptConfigLoading.value = false;
+    gptChecked.value = true;
   }
-}
-
-// 应用预设：填 url + 选定/默认模型
-function applyGptPreset(p: Record<string, any>, model?: string) {
-  gptConfig.gpt_url = p.url;
-  gptConfig.gpt_model = model || (p.models && p.models[0]) || '';
-}
-
-// 保存 GPT 参数（token 留空表示保留原密钥）
-async function saveGptConfig() {
-  if (!gptConfig.gpt_url || !gptConfig.gpt_model) {
-    MessagePlugin.warning(t('page.rule.detail.gpt_url_model_required'));
-    return;
-  }
-  gptConfigSaving.value = true;
-  try {
-    const res = await wafGptConfigSaveApi({
-      gpt_url: gptConfig.gpt_url.trim(),
-      gpt_model: gptConfig.gpt_model.trim(),
-      gpt_token: (gptConfig.gpt_token || '').trim(),
-    });
-    if (res.code === 0) {
-      MessagePlugin.success(t('page.rule.detail.gpt_save_ok'));
-      if ((gptConfig.gpt_token || '').trim()) gptConfig.has_token = true;
-      gptConfig.gpt_token = '';
-      gptConfigDialogVisible.value = false;
-    } else {
-      MessagePlugin.warning(res.msg || t('page.rule.detail.gpt_save_fail'));
-    }
-  } catch (e) {
-    console.log(e);
-    MessagePlugin.error(t('page.rule.detail.gpt_save_fail'));
-  } finally {
-    gptConfigSaving.value = false;
-  }
+  return gptHasToken.value;
 }
 
 // 调用后台 AI 生成规则（后端已做校验/修复闭环）
@@ -1112,6 +1030,15 @@ async function onAiGenRule() {
   if (!intent) {
     MessagePlugin.warning(t('page.rule.detail.ai_gen_empty'));
     return;
+  }
+  // 没配密钥直接引导去配置，不用等后端报错
+  if (!gptHasToken.value) {
+    const configured = await checkGptConfig();
+    if (!configured) {
+      MessagePlugin.warning(t('page.rule.detail.gpt_not_configured'));
+      gptConfigDialogVisible.value = true;
+      return;
+    }
   }
   aiGenLoading.value = true;
   aiGenResult.value = null;
@@ -1223,6 +1150,8 @@ function onCancelTest() {
 
 onMounted(() => {
   loadHostList();
+  // 进页面就检测一次 AI 密钥，没配的话在 AI 生成面板里先提示
+  checkGptConfig();
 
   if (route.query.code != undefined) {
     op_rule_no.value = String(route.query.code);
@@ -1454,77 +1383,26 @@ onMounted(() => {
   justify-content: flex-end;
 }
 
-/* GPT 参数设置 */
+/* GPT 参数设置入口（表单样式在 components/gpt-config 里） */
 .ai-gen-setting {
   display: inline-flex;
   align-items: center;
   gap: 2px;
 }
 
-.gpt-token-tip {
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  margin: 4px 0 12px 110px;
-}
-
-.gpt-preset-title {
-  font-weight: 500;
-  margin: 8px 0;
-}
-
-.gpt-preset-list {
-  max-height: 320px;
-  overflow-y: auto;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: 6px;
-}
-
-.gpt-preset-item {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--td-component-stroke);
-}
-
-.gpt-preset-item:last-child {
-  border-bottom: none;
-}
-
-.gpt-preset-main {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.gpt-preset-name {
-  font-weight: 500;
-}
-
-.gpt-preset-desc {
-  color: var(--td-text-color-secondary);
-  font-size: 12px;
-}
-
-.gpt-preset-url {
-  color: var(--td-text-color-secondary);
-  font-size: 12px;
-  margin: 2px 0;
-  word-break: break-all;
-}
-
-.gpt-preset-models {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 4px 0;
-}
-
-.gpt-preset-model {
-  cursor: pointer;
-}
-
-.gpt-preset-ops {
+/* 未配置密钥提示条 */
+.ai-gen-unset {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background-color: var(--td-warning-color-1);
+  color: var(--td-warning-color-7);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 /* 编辑器内 AI 生成规则面板 */

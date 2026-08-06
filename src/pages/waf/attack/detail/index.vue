@@ -479,7 +479,8 @@ function openVideoTutorial() {
 }
 
 function handelToAi() {
-  bus.emit('sendAi', httpAiMask.value);
+  // 日志详情走"安全风险分析"提示词
+  bus.emit('sendAi', { q: httpAiMask.value, scene: 'security_log' });
   httpAiMaskVisible.value = false;
 }
 

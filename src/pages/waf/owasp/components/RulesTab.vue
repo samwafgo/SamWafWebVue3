@@ -550,7 +550,8 @@ function onAiAnalyze() {
 }
 
 function confirmSendAi() {
-  bus.emit('sendAi', aiPrompt.value);
+  // 规则解读走 OWASP 规则提示词，不套风险评分格式
+  bus.emit('sendAi', { q: aiPrompt.value, scene: 'owasp_rule' });
   aiDialogVisible.value = false;
 }
 
