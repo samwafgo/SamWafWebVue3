@@ -232,6 +232,8 @@ const messageTypes = computed(() => [
   // 合成一类的话，只想收告警的人会被每次正常登录打扰，最后干脆退订，告警也就收不到了。
   { type: 'access_login', name: t('page.notify_subscription.message_type_access_login') },
   { type: 'access_abnormal', name: t('page.notify_subscription.message_type_access_abnormal') },
+  // 管理端登录来源变化：同理和 user_login 拆开，只想收"可能是别人登进来了"的人不必订阅日常登录
+  { type: 'manage_login_abnormal', name: t('page.notify_subscription.message_type_manage_login_abnormal') },
 ]);
 
 const emailDialogVisible = ref(false);
