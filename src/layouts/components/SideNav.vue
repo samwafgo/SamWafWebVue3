@@ -14,10 +14,18 @@
     </template>
     <menu-content :nav-data="menuRoutes" />
     <template #operations>
-      <span v-if="versionInfo.version" class="version-container">
-        {{ versionInfo.version_name }}({{ versionInfo.version }})
-        <span v-if="versionInfo.version_release === 'false'" style="color: red">{{ t('common.debug') }}</span>
-      </span>
+      <!-- 版本号即“系统信息”入口：做成带图标的可点击块，避免用户看不出来能点 -->
+      <t-tooltip placement="top" :content="t('common.system_info.tooltip')">
+        <div v-if="versionInfo.version" class="version-entry" @click="sysinfoVisible = true">
+          <device-icon class="version-entry-icon" />
+          <span v-if="!collapsed" class="version-entry-text">
+            {{ versionInfo.version_name }}({{ versionInfo.version }})
+            <span v-if="versionInfo.version_release === 'false'" style="color: red">{{ t('common.debug') }}</span>
+          </span>
+        </div>
+      </t-tooltip>
+      <!-- 点击版本号查看系统信息与在线交流渠道 -->
+      <system-info-dialog v-model:visible="sysinfoVisible" />
     </template>
   </t-menu>
 </template>
@@ -27,12 +35,14 @@ import { computed, ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import type { MenuValue } from 'tdesign-vue-next';
+import { DeviceIcon } from 'tdesign-icons-vue-next';
 import { routes } from '@/router';
 import { useSettingStore } from '@/store/modules/setting';
 import { SysVersionApi } from '@/apis/sysinfo';
 import logoFull from '@/assets/assets-logo-full.svg';
 import logoSmall from '@/assets/assets-t-logo.svg';
 import MenuContent from './MenuContent.vue';
+import SystemInfoDialog from './SystemInfoDialog.vue';
 
 withDefaults(defineProps<{ collapsed?: boolean }>(), { collapsed: false });
 
@@ -52,6 +62,9 @@ const versionInfo = ref<{ version: string; version_name: string; version_release
   version_name: '',
   version_release: '',
 });
+
+/** 系统信息弹窗 */
+const sysinfoVisible = ref(false);
 
 onMounted(() => {
   SysVersionApi()
@@ -86,13 +99,33 @@ function onMenuChange(value: MenuValue) {
   filter: invert(1) hue-rotate(180deg);
 }
 
-.version-container {
-  display: inline-block;
-  width: 100%;
-  color: var(--td-text-color-placeholder);
+/* 左下角版本号 = 系统信息入口，需要看起来可点 */
+.version-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: var(--td-radius-default);
+  color: var(--td-brand-color);
   font-size: 12px;
-  white-space: nowrap;
+  line-height: 20px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.version-entry:hover {
+  background-color: var(--td-brand-color-light);
+}
+
+.version-entry-icon {
+  flex: 0 0 auto;
+  font-size: 16px;
+}
+
+.version-entry-text {
   overflow: hidden;
+  white-space: nowrap;
   text-overflow: ellipsis;
 }
 </style>
