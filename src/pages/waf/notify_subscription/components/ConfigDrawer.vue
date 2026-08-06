@@ -142,13 +142,13 @@
           <t-form :label-width="120">
             <t-form-item :label="t('page.notify_subscription.label_filter_domains')">
               <div style="width: 100%">
-                <t-textarea v-model="filterText.domains" placeholder="www.example.com&#10;*.example.com" :autosize="{ minRows: 3, maxRows: 6 }" />
+                <t-textarea v-model="filterText.domains" :placeholder="domainsPlaceholder" :autosize="{ minRows: 3, maxRows: 6 }" />
                 <div class="form-tip">{{ t('page.notify_subscription.filter_domains_tip') }}</div>
               </div>
             </t-form-item>
             <t-form-item :label="t('page.notify_subscription.label_filter_exclude_ips')">
               <div style="width: 100%">
-                <t-textarea v-model="filterText.exclude_ips" placeholder="10.0.0.0/8&#10;192.168.1.1" :autosize="{ minRows: 3, maxRows: 6 }" />
+                <t-textarea v-model="filterText.exclude_ips" :placeholder="excludeIpsPlaceholder" :autosize="{ minRows: 3, maxRows: 6 }" />
                 <div class="form-tip">{{ t('page.notify_subscription.filter_exclude_ips_tip') }}</div>
               </div>
             </t-form-item>
@@ -275,6 +275,9 @@ const activeTab = ref('throttle');
 const form = ref(emptyForm());
 // 多行文本 ↔ 数组：过滤条件用文本框填更顺手，提交前再切成数组
 const filterText = ref({ domains: '', exclude_ips: '', keywords: '' });
+// 换行只能从 JS 传：写在模板的 placeholder 属性里会被当成字面量 &#10; 显示出来
+const domainsPlaceholder = 'www.example.com\n*.example.com';
+const excludeIpsPlaceholder = '10.0.0.0/8\n192.168.1.1';
 const cooldownStepsText = ref('');
 const templateVars = ref<Record<string, any>[]>([]);
 const defaultTitle = ref('');
