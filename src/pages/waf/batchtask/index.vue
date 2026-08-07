@@ -111,6 +111,9 @@
                 :label="`${g.group_name} (${g.item_count})`"
               ></t-option>
             </t-select>
+            <a class="t-button-link" style="margin-left: 8px" @click="handleQuickAddGroup('add')">
+              {{ t('page.batchtask.ip_group_quick_add') }}
+            </a>
             <a class="t-button-link" style="margin-left: 8px" @click="handleJumpIPGroup">
               {{ t('page.batchtask.ip_group_goto_manage') }}
             </a>
@@ -217,6 +220,9 @@
                 :label="`${g.group_name} (${g.item_count})`"
               ></t-option>
             </t-select>
+            <a class="t-button-link" style="margin-left: 8px" @click="handleQuickAddGroup('edit')">
+              {{ t('page.batchtask.ip_group_quick_add') }}
+            </a>
             <a class="t-button-link" style="margin-left: 8px" @click="handleJumpIPGroup">
               {{ t('page.batchtask.ip_group_goto_manage') }}
             </a>
@@ -296,6 +302,27 @@
       @confirm="onConfirmDelete"
     >
     </t-dialog>
+
+    <!-- 就地新建IP组：不用离开当前表单，建完自动选中 -->
+    <t-dialog
+      v-model:visible="quickAddVisible"
+      :header="t('page.batchtask.ip_group_quick_add')"
+      :width="600"
+      :footer="false"
+    >
+      <t-form ref="quickAddForm" :data="quickAddData" :rules="quickAddRules" :label-width="100" @submit="onSubmitQuickAdd">
+        <t-form-item :label="t('page.ipgroup.label_name')" name="group_name">
+          <t-input v-model="quickAddData.group_name" :style="{ width: '420px' }"></t-input>
+        </t-form-item>
+        <t-form-item :label="t('common.remarks')" name="remarks">
+          <t-textarea v-model="quickAddData.remarks" :style="{ width: '420px' }" :autosize="{ minRows: 3, maxRows: 3 }"></t-textarea>
+        </t-form-item>
+        <t-form-item style="float: right">
+          <t-button variant="outline" @click="quickAddVisible = false">{{ t('common.close') }}</t-button>
+          <t-button theme="primary" type="submit">{{ t('common.confirm') }}</t-button>
+        </t-form-item>
+      </t-form>
+    </t-dialog>
   </div>
 </template>
 
@@ -314,7 +341,7 @@ import {
   batchTaskManualApi,
 } from '@/apis/batchtask';
 import { allhost } from '@/apis/host';
-import { wafIPGroupOptionsApi } from '@/apis/ipgroup';
+import { wafIPGroupAddApi, wafIPGroupOptionsApi } from '@/apis/ipgroup';
 import { getOnlineUrl } from '@/utils/usuallytool';
 
 const { t } = useI18n();
@@ -409,6 +436,13 @@ const host_dic = reactive<Record<string, string>>({});
 const default_host_code = ref('');
 // IP组下拉选项
 const groupOptions = ref<Record<string, any>[]>([]);
+// 就地新建IP组
+const quickAddVisible = ref(false);
+const quickAddTarget = ref<'add' | 'edit'>('add'); // 建完后把新组填回哪个表单
+const quickAddData = ref<Record<string, any>>({ group_name: '', remarks: '' });
+const quickAddRules: FormProps['rules'] = {
+  group_name: [{ required: true, message: t('common.placeholder') + t('page.ipgroup.label_name'), type: 'error' }],
+};
 
 const pagination = reactive({
   total: 0,
@@ -509,17 +543,51 @@ onMounted(() => {
   }
 });
 
-function loadGroupOptions() {
+function loadGroupOptions(onLoaded?: () => void) {
   wafIPGroupOptionsApi()
     .then((res) => {
       if (res.code === 0) {
         groupOptions.value = res.data ?? [];
       }
+      onLoaded?.();
     })
     .catch((e: Error) => {
       console.log(e);
     });
 }
+
+// 就地新建IP组：跳去IP组页面再跳回来会丢掉正在填的任务表单，所以直接在这里建
+function handleQuickAddGroup(target: 'add' | 'edit') {
+  quickAddTarget.value = target;
+  quickAddData.value = { group_name: '', remarks: '' };
+  quickAddVisible.value = true;
+}
+
+const onSubmitQuickAdd: FormProps['onSubmit'] = ({ validateResult }) => {
+  if (validateResult !== true) {
+    return;
+  }
+  wafIPGroupAddApi({ ...quickAddData.value }).then((res) => {
+    if (res.code !== 0) {
+      MessagePlugin.warning(res.msg);
+      return;
+    }
+    MessagePlugin.success('添加成功');
+    quickAddVisible.value = false;
+    // 刷新下拉后自动选中刚建的组，省掉用户再去下拉里找一遍
+    const newCode = res.data?.group_code;
+    loadGroupOptions(() => {
+      if (!newCode) {
+        return;
+      }
+      if (quickAddTarget.value === 'edit') {
+        formEditData.value.ip_group_code = newCode;
+      } else {
+        formData.value.ip_group_code = newCode;
+      }
+    });
+  });
+};
 
 // 从额外配置JSON里取出 group_code，配置非法时当作未配置
 function extractGroupCode(extraConfig: string) {
