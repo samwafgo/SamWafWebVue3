@@ -1,6 +1,7 @@
 /**
  * 轻量事件总线（替代 Vue2 的 $bus），用于跨组件通信：
  * - 'sendAi'：各页面把分析内容发送给布局层的 AI 助手抽屉
+ * - 'hostguard-ban'：后端主机防爆破封禁时经 WebSocket 广播，「远程防爆破」页据此即时刷新
  */
 type Handler = (payload?: any) => void;
 

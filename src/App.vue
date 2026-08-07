@@ -8,6 +8,7 @@ import { DialogPlugin } from 'tdesign-vue-next';
 import { v4 as uuidv4 } from 'uuid';
 
 import websocket from '@/utils/websocket';
+import bus from '@/utils/bus';
 import { AesDecrypt } from '@/utils/crypto';
 import { clearLocalStorageExceptPreserved, saveCurrentUrl } from '@/constants';
 import { useStatsStore } from '@/store/modules/stats';
@@ -101,6 +102,13 @@ function wsOnMessage(e: MessageEvent) {
       if (wsData.msg_data.message_attach) {
         statsStore.addStatsData(wsData.msg_data.message_attach);
       }
+      return;
+    }
+    if (wsData.msg_cmd_type === 'HostGuard') {
+      // 主机防爆破封禁：只广播事件，由「远程防爆破」页面自行决定要不要刷新。
+      // 不在这里弹通知——IP封禁本来就已经走 Info 通道发过一次了，
+      // 再弹一次用户会看到两条一样的消息。
+      bus.emit('hostguard-ban', wsData.msg_data.message_attach);
       return;
     }
     notificationStore.addMsgData(wsData.msg_data);
