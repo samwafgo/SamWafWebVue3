@@ -38,6 +38,13 @@
         <t-form-item>
           <t-button theme="primary" @click="reloadIPs">{{ t('common.search') }}</t-button>
         </t-form-item>
+        <!-- 默认列的是"实际进了防火墙的"，勾上才看被排除掉的那些。
+             没有这个开关的话，用户看到「已排除N条」却无处查证是哪几条、被谁排的 -->
+        <t-form-item>
+          <t-checkbox v-model="ipSearch.onlyExcluded" @change="reloadIPs">
+            {{ t('page.threatip.only_excluded') }}
+          </t-checkbox>
+        </t-form-item>
       </t-form>
       <t-table
         :columns="ipColumns"
@@ -54,6 +61,15 @@
           <t-tooltip :content="t('common.ip_lookup.click_tip')">
             <a class="ipl-link" @click="openIpLookup(row.ip)">{{ row.ip }}</a>
           </t-tooltip>
+        </template>
+        <template #excluded_by="{ row }">
+          <span v-if="!row.excluded_by">-</span>
+          <span v-else>
+            <code class="tie-code">{{ row.excluded_by }}</code>
+            <t-tag v-if="row.reason" theme="warning" variant="light" size="small" :style="{ marginLeft: '6px' }">
+              {{ row.reason }}
+            </t-tag>
+          </span>
         </template>
       </t-table>
       <ip-lookup ref="ipLookupRef" hide-trigger />
@@ -105,12 +121,13 @@ const columns = computed<TableProps['columns']>(() => [
 const ipDialogVisible = ref(false);
 const ipDialogTitle = ref('');
 const ipChannelCode = ref('');
-const ipSearch = reactive({ keyword: '' });
+const ipSearch = reactive({ keyword: '', onlyExcluded: false });
 const ipLoading = ref(false);
 const ipData = ref<Record<string, any>[]>([]);
 const ipPagination = reactive({ total: 0, current: 1, pageSize: 10 });
 const ipColumns = computed<TableProps['columns']>(() => [
   { title: 'IP / CIDR', align: 'left', colKey: 'ip', cell: 'ip' },
+  { title: t('page.threatip.excluded_by'), align: 'left', width: 280, colKey: 'excluded_by', cell: 'excluded_by' },
 ]);
 
 function landTargetLabel(v: string) {
@@ -156,13 +173,14 @@ function loadIPs() {
   wafThreatIPLandedIPsApi({
     code: ipChannelCode.value,
     keyword: ipSearch.keyword,
+    only_excluded: ipSearch.onlyExcluded ? 1 : 0,
     pageIndex: ipPagination.current,
     pageSize: ipPagination.pageSize,
   })
     .then((res) => {
       if (res.code === 0) {
-        const list = res.data.list ?? [];
-        ipData.value = list.map((ip: string) => ({ ip }));
+        // 后端已返回 {ip, excluded_by, reason} 对象，不需要再包一层
+        ipData.value = res.data.list ?? [];
         ipPagination.total = res.data.total;
       }
     })
@@ -198,5 +216,13 @@ onMounted(() => {
   margin-left: 6px;
   font-size: 12px;
   color: var(--td-text-color-placeholder);
+}
+.tie-code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: 2px;
+  background: var(--td-bg-color-secondarycontainer);
+  color: var(--td-text-color-secondary);
 }
 </style>

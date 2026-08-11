@@ -30,7 +30,10 @@
         ]"
         storage-key="threatip"
       >
-        <template #actions><ip-lookup ref="ipLookupRef" /></template>
+        <template #actions>
+          <ip-lookup ref="ipLookupRef" />
+          <threat-exclude-panel ref="excludePanelRef" @changed="getList()" />
+        </template>
       </help-block>
       <div class="table-container">
         <t-table
@@ -55,7 +58,14 @@
           </template>
           <template #last_count="{ row }">
             <span>{{ row.last_count }}</span>
-            <!-- 落地层含系统防火墙、但系统层还没确认落到当前快照：
+            <!-- 被误报排除名单剔掉的条数：解释"为什么防火墙里的数字比收录条数少"，
+                 不显示的话用户会以为落地漏了 -->
+            <t-tooltip v-if="row.excluded_count > 0" :content="t('page.threatip.excluded_tip')">
+              <t-tag theme="primary" variant="light" size="small" style="margin-left: 6px">
+                {{ t('page.threatip.excluded_count', { n: row.excluded_count }) }}
+              </t-tag>
+            </t-tooltip>
+            <!-- 落地层含系统防火墙、但系统层还没确认落到当前应有的内容：
                  这正是"页面显示 ok、防火墙里其实只封了一半"的那种静默失效，必须让用户看得见 -->
             <t-tooltip v-if="!row.landed_ok" :content="t('page.threatip.landed_incomplete_tip')">
               <t-tag theme="warning" variant="light" size="small" style="margin-left: 6px">
@@ -216,6 +226,7 @@ import {
   wafThreatIPDelApi,
   wafThreatIPSyncApi,
 } from '@/apis/threatip';
+import ThreatExcludePanel from '@/pages/waf/threatip/components/ThreatExcludePanel.vue';
 
 const INITIAL_DATA = {
   code: '',
