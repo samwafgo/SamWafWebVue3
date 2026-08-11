@@ -18,11 +18,7 @@
           </t-form>
         </div>
       </t-row>
-      <t-alert theme="info" :message="t('page.ssl.alert_message')" close>
-        <template #operation>
-          <span @click="handleJumpOnlineUrl">{{ t('common.online_document') }}</span>
-        </template>
-      </t-alert>
+      <help-block :summary="t('page.ssl.alert_message')" doc="guide/SSL" />
       <div class="table-container">
         <t-table
           :columns="columns"
@@ -292,9 +288,6 @@ function onCancel() {
   deleteIdx.value = -1;
 }
 
-function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/SSL.html`);
-}
 
 // 导入证书文件
 function importCertFile(mode: 'add' | 'edit') {

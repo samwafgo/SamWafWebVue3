@@ -21,11 +21,7 @@
         </div>
       </t-row>
 
-      <t-alert theme="info" :message="t('page.one_key_mod.modify_logs')" close>
-        <template #operation>
-          <span @click="handleJumpOnlineUrl">{{ t('common.online_document') }}</span>
-        </template>
-      </t-alert>
+      <help-block :summary="t('page.one_key_mod.modify_logs')" doc="guide/OneKeyMod" />
       <div class="table-container">
         <t-table
           :columns="columns"
@@ -267,9 +263,6 @@ function getDetail(id: string | number) {
 }
 
 // 跳转界面
-function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/OneKeyMod.html`);
-}
 
 // 一键修改
 function handleOneKeyModify() {

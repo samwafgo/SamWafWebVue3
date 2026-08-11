@@ -18,7 +18,7 @@
           </t-form>
         </div>
       </t-row>
-      <t-alert theme="info" :message="t('page.access.account.alert_message')" close />
+      <help-block :summary="t('page.access.account.alert_message')" doc="guide/AccessAccount" />
       <div class="table-container">
         <t-table
           :columns="columns"

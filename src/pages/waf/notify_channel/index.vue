@@ -26,7 +26,7 @@
           </t-form>
         </div>
       </t-row>
-      <t-alert theme="info" :message="t('page.notify_channel.alert_message')" close> </t-alert>
+      <help-block :summary="t('page.notify_channel.alert_message')" doc="guide/NotifyChannel" />
       <div class="table-container">
         <t-table
           :columns="columns"

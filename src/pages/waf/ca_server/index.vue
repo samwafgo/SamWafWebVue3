@@ -15,11 +15,7 @@
           </t-form>
         </div>
       </t-row>
-      <t-alert theme="info" :message="t('page.ca_server_info.alert_message')" close>
-        <template #operation>
-          <span @click="handleJumpOnlineUrl">{{ t('common.online_document') }}</span>
-        </template>
-      </t-alert>
+      <help-block :summary="t('page.ca_server_info.alert_message')" doc="guide/SSL" />
       <div class="table-container">
         <t-table
           :columns="columns"
@@ -278,9 +274,6 @@ function getDetail(id: string | number) {
     .catch((e: Error) => console.log(e));
 }
 
-function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/SSL.html`);
-}
 
 onMounted(() => {
   getList();

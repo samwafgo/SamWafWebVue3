@@ -31,11 +31,7 @@
           </t-form>
         </div>
       </t-row>
-      <t-alert theme="info" :message="t('page.urlblock.alert_message')" close>
-        <template #operation>
-          <span @click="handleJumpOnlineUrl">{{ t('common.online_document') }}</span>
-        </template>
-      </t-alert>
+      <help-block :summary="t('page.urlblock.alert_message')" doc="guide/UrlBlack" />
       <div class="table-container">
         <t-table
           :columns="columns"
@@ -371,9 +367,6 @@ function getDetail(id: string | number) {
     .catch((e: Error) => console.log(e));
 }
 
-function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/UrlBlack.html`);
-}
 
 function handleBatchDelete() {
   if (selectedRowKeys.value.length === 0) {

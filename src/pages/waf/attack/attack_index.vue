@@ -1,10 +1,6 @@
 <template>
   <div>
-    <t-alert theme="info" :message="t('page.attack_log.attack_log')" :close="true">
-      <template #operation>
-        <span @click="handleJumpOnlineUrl">{{ t('common.online_document') }}</span>
-      </template>
-    </t-alert>
+    <help-block :summary="t('page.attack_log.attack_log')" doc="guide/AttackLog" />
     <t-card class="list-card-container">
       <t-tabs v-model="attackSearchformData.rule">
         <t-tab-panel v-for="(item, index) in attackTags" :key="index" :value="item.value" :label="item.label"> </t-tab-panel>
@@ -295,9 +291,6 @@ function handleAddipblock(row: Record<string, any>) {
 }
 
 // Jump Url
-function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/AttackLog.html`);
-}
 
 /**
  * table 排序

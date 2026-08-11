@@ -15,11 +15,7 @@
           </t-form>
         </div>
       </t-row>
-      <t-alert theme="info" :message="t('page.cache_rule.alert_message')" close>
-        <template #operation>
-          <span @click="handleJumpOnlineUrl">{{ t('common.online_document') }}</span>
-        </template>
-      </t-alert>
+      <help-block :summary="t('page.cache_rule.alert_message')" doc="guide/CacheRule" />
       <div class="table-container">
         <t-table
           :columns="columns"
@@ -470,9 +466,6 @@ function getDetail(id: string | number) {
     });
 }
 
-function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/CacheRule.html`);
-}
 
 onMounted(() => {
   loadHostList().then(() => {

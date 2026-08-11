@@ -22,14 +22,11 @@
           </t-form>
         </div>
       </t-row>
-      <t-alert theme="info" :message="t('page.sslorder.alert_message')" close>
-        <template #operation>
-          <t-space>
-            <span class="highlight-link" @click="handleSslHttpCheck">{{ t('page.sslorder.ssl_http_check_setting') }}</span>
-            <span @click="handleJumpOnlineUrl">{{ t('common.online_document') }}</span>
-          </t-space>
+      <help-block :summary="t('page.sslorder.alert_message')" doc="guide/SSL">
+        <template #actions>
+          <span class="highlight-link" @click="handleSslHttpCheck">{{ t('page.sslorder.ssl_http_check_setting') }}</span>
         </template>
-      </t-alert>
+      </help-block>
       <div class="table-container">
         <t-table
           :columns="columns"
@@ -1113,9 +1110,6 @@ function onCancel() {
   deleteIdx.value = -1;
 }
 
-function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/SSL.html`);
-}
 
 onMounted(() => {
   reloadInitData();

@@ -29,11 +29,7 @@
       </t-row>
 
       <div class="table-container">
-        <t-alert theme="info" :message="t('page.host.core_features')" close>
-          <template #operation>
-            <span @click="handleJumpOnlineUrl">{{ t('common.online_document') }}</span>
-          </template>
-        </t-alert>
+        <help-block :summary="t('page.host.core_features')" doc="guide/Host" />
         <t-table
           :columns="columns"
           size="small"
@@ -929,9 +925,6 @@ function onUploadSuccess(context: any) {
 }
 
 // 跳转在线文档
-function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/Host.html`);
-}
 
 // 防护状态弹窗确认
 function onGuardStatusConfirm() {

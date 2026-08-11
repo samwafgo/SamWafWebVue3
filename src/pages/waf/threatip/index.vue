@@ -18,8 +18,18 @@
           </t-form>
         </div>
       </t-row>
-      <t-alert theme="info" :message="t('page.threatip.alert_message')" close />
-      <t-alert theme="warning" :message="t('page.threatip.op_help')" close />
+      <help-block
+        :summary="t('page.threatip.alert_message')"
+        :items="helpItems"
+        :note="t('page.threatip.help_note')"
+        :title="t('page.threatip.help_title')"
+        doc="guide/ThreatIP"
+        :links="[
+          { label: t('page.threatip.doc_feeds'), doc: 'guide/ThreatIP#常用订阅源' },
+          { label: t('page.threatip.doc_firewall'), doc: 'guide/FirewallIPBlock' },
+        ]"
+        storage-key="threatip"
+      />
       <div class="table-container">
         <t-table
           :columns="columns"
@@ -304,6 +314,14 @@ const syncPollSawSyncing = ref(false);
 
 // 是否有任一渠道正在同步(后端全局串行，一个在跑其余点了也只会被跳过)
 const anySyncing = computed(() => data.value.some((row: Record<string, any>) => row.syncing));
+
+// 四个操作各自做了什么，拆成条目比一整段文字好扫
+const helpItems = computed(() => [
+  { k: t('page.threatip.enable_op'), v: t('page.threatip.help_enable'), tone: 'brand' as const },
+  { k: t('page.threatip.disable_op'), v: t('page.threatip.help_disable') },
+  { k: t('page.threatip.sync_op'), v: t('page.threatip.help_sync'), tone: 'brand' as const },
+  { k: t('page.threatip.delete_op'), v: t('page.threatip.help_delete'), tone: 'danger' as const },
+]);
 
 // silent=true 用于轮询刷新：不显示表格 loading，避免每 3 秒闪一次
 function getList(silent = false) {

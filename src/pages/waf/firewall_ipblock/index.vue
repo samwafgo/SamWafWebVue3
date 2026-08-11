@@ -111,11 +111,7 @@
           <span @click="handleJumpOnlineUrl">{{ t('common.online_document') }}</span>
         </template>
       </t-alert>
-      <t-alert theme="info" :message="t('page.firewall_ipblock.alert_message')" close>
-        <template #operation>
-          <span @click="handleJumpOnlineUrl">{{ t('common.online_document') }}</span>
-        </template>
-      </t-alert>
+      <help-block :summary="t('page.firewall_ipblock.alert_message')" doc="guide/FirewallIPBlock" />
       <div class="table-container">
         <t-table
           :columns="columns"

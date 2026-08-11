@@ -1,10 +1,6 @@
 <template>
   <div>
-    <t-alert theme="info" :message="t('page.visit_log.visit_log')" :close="true">
-      <template #operation>
-        <span @click="handleJumpOnlineUrl">{{ t('common.online_document') }}</span>
-      </template>
-    </t-alert>
+    <help-block :summary="t('page.visit_log.visit_log')" doc="guide/VisitLog" />
 
     <!-- 日志配置区域 -->
     <t-card class="log-config-card" style="margin-bottom: 16px">
@@ -1315,9 +1311,6 @@ function handleClickIPDetail(e: { row: Record<string, any> }) {
 }
 
 // Jump Url
-function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/AttackLog.html`);
-}
 
 /**
  * table 排序

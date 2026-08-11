@@ -34,7 +34,7 @@
           </t-form>
         </div>
       </t-row>
-      <t-alert theme="info" :message="t('page.access.session.alert_message')" close />
+      <help-block :summary="t('page.access.session.alert_message')" doc="guide/AccessSession" />
       <div class="table-container">
         <t-table
           :columns="columns"

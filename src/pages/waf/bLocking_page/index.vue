@@ -15,11 +15,7 @@
           </t-form>
         </div>
       </t-row>
-      <t-alert theme="info" :message="t('page.blocking_page.alert_message')" close>
-        <template #operation>
-          <span @click="handleJumpOnlineUrl">{{ t('common.online_document') }}</span>
-        </template>
-      </t-alert>
+      <help-block :summary="t('page.blocking_page.alert_message')" doc="guide/BlockingPage" />
       <div class="table-container">
         <t-table
           :columns="columns"
@@ -425,9 +421,6 @@ function getDetail(id: string | number) {
     .catch((e: Error) => console.log(e));
 }
 
-function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/BlockingPage.html`);
-}
 
 onMounted(() => {
   loadHostList().then(() => {

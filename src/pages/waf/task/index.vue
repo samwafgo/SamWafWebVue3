@@ -13,11 +13,7 @@
           </t-form>
         </div>
       </t-row>
-      <t-alert theme="info" :message="t('page.task.alert_message')" close>
-        <template #operation>
-          <span @click="handleJumpOnlineUrl">{{ t('common.online_document') }}</span>
-        </template>
-      </t-alert>
+      <help-block :summary="t('page.task.alert_message')" doc="guide/Task" />
       <div class="table-container">
         <t-table
           :columns="columns"
@@ -371,9 +367,6 @@ function getDetail(id: string | number) {
     });
 }
 
-function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/Task.html`);
-}
 
 // 查看任务日志
 function handleViewLog(e: { row: Record<string, any> }) {

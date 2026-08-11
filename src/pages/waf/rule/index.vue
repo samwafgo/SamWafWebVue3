@@ -42,11 +42,7 @@
         </t-form>
       </div>
 
-      <t-alert theme="info" :message="t('page.rule.alert_message')" close>
-        <template #operation>
-          <span @click="handleJumpOnlineUrl">{{ t('page.rule.rule_online_document') }}</span>
-        </template>
-      </t-alert>
+      <help-block :summary="t('page.rule.alert_message')" doc="guide/Rule" />
       <div class="table-container">
         <t-table
           :columns="columns"
@@ -386,9 +382,6 @@ function onConfirmClearAll() {
     });
 }
 
-function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/Rule.html`);
-}
 
 // 修改规则状态（点击开关切换为相反状态）
 function changeRuleStatusHandle(row: Record<string, any>) {

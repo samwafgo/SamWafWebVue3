@@ -18,11 +18,7 @@
           </t-form>
         </div>
       </t-row>
-      <t-alert theme="info" :message="t('page.batchtask.alert_message')" close>
-        <template #operation>
-          <span @click="handleJumpOnlineUrl">{{ t('common.online_document') }}</span>
-        </template>
-      </t-alert>
+      <help-block :summary="t('page.batchtask.alert_message')" doc="guide/BatchTask" />
       <div class="table-container">
         <t-table
           :columns="columns"
@@ -784,9 +780,6 @@ function onCancel() {
   deleteIdx.value = -1;
 }
 
-function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/BatchTask.html`);
-}
 
 function onClickCloseBtn() {
   addFormVisible.value = false;

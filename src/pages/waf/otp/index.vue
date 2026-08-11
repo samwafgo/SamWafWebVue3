@@ -1,11 +1,7 @@
 <template>
   <div>
     <t-card class="list-card-container">
-      <t-alert theme="info" :message="t('page.otp.alert_message')" close>
-        <template #operation>
-          <span @click="handleJumpOnlineUrl">{{ t('common.online_document') }}</span>
-        </template>
-      </t-alert>
+      <help-block :summary="t('page.otp.alert_message')" doc="guide/Otp" />
       <div class="table-container">
         <t-form v-if="!isBind" ref="bindForm" :data="formData" :rules="rules" :label-width="200" @submit="onBindSubmit">
           <t-form-item style="text-align: center">
@@ -164,9 +160,6 @@ const onUnBindSubmit: FormProps['onSubmit'] = ({ firstError }) => {
   }
 };
 
-function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/Otp.html`);
-}
 </script>
 
 <style scoped>
