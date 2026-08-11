@@ -48,7 +48,15 @@
         :pagination="ipPagination"
         :loading="ipLoading"
         @page-change="onIPPageChange"
-      />
+      >
+        <template #ip="{ row }">
+          <!-- 列表里是网段，点了按其中一个代表IP查，弹窗会说明查的是哪个 -->
+          <t-tooltip :content="t('common.ip_lookup.click_tip')">
+            <a class="ipl-link" @click="openIpLookup(row.ip)">{{ row.ip }}</a>
+          </t-tooltip>
+        </template>
+      </t-table>
+      <ip-lookup ref="ipLookupRef" hide-trigger />
     </t-dialog>
   </div>
 </template>
@@ -58,6 +66,13 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { PageInfo, TableProps } from 'tdesign-vue-next';
 import { wafThreatIPLandedSummaryApi, wafThreatIPLandedIPsApi } from '@/apis/threatip';
+
+// 点列表里的 IP 直接开归属查询，省得用户复制粘贴
+const ipLookupRef = ref<any>(null);
+function openIpLookup(ip: string) {
+  if (!ip) return;
+  ipLookupRef.value?.open(ip);
+}
 
 const props = defineProps<{
   // system | waf : 只展示落地到该层的渠道
@@ -94,7 +109,9 @@ const ipSearch = reactive({ keyword: '' });
 const ipLoading = ref(false);
 const ipData = ref<Record<string, any>[]>([]);
 const ipPagination = reactive({ total: 0, current: 1, pageSize: 10 });
-const ipColumns = computed<TableProps['columns']>(() => [{ title: 'IP / CIDR', align: 'left', colKey: 'ip' }]);
+const ipColumns = computed<TableProps['columns']>(() => [
+  { title: 'IP / CIDR', align: 'left', colKey: 'ip', cell: 'ip' },
+]);
 
 function landTargetLabel(v: string) {
   const found = landOptions.value.find((o) => o.value === v);

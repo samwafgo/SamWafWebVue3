@@ -30,6 +30,9 @@
           @page-change="rehandlePageChange"
           @select-change="rehandleSelectChange"
         >
+          <template #role="{ row }">
+            <t-tag theme="primary" variant="light">{{ roleLabel(row.role) }}</t-tag>
+          </template>
           <template #op="slotProps">
             <a class="t-button-link" @click="handleClickResetPwd(slotProps)">{{ t('page.account.reset_password') }}</a>
             <a class="t-button-link" @click="handleClickResetOtp(slotProps)">{{ t('page.account.reset_otp') }}</a>
@@ -255,6 +258,12 @@ const roleType = computed(() => [
   { label: t('page.account.role_audit_admin'), value: 'auditAdmin' },
 ]);
 
+// 列表里存的是 superAdmin 这类原始值，直接显示用户看不懂，转成配置里的中文名
+function roleLabel(v: string) {
+  const found = roleType.value.find((o) => o.value === v);
+  return found ? found.label : v || '-';
+}
+
 const dataLoading = ref(false);
 const data = ref<Record<string, any>[]>([]);
 const selectedRowKeys = ref<(string | number)[]>([]);
@@ -262,7 +271,7 @@ const rowKey = 'code';
 
 const columns = computed<TableProps['columns']>(() => [
   { title: t('page.account.login_account_label'), align: 'left', width: 250, ellipsis: true, colKey: 'login_account' },
-  { title: t('page.account.role'), align: 'left', width: 250, ellipsis: true, colKey: 'role' },
+  { title: t('page.account.role'), align: 'left', width: 250, ellipsis: true, colKey: 'role', cell: 'role' },
   { title: t('common.remarks'), width: 200, ellipsis: true, colKey: 'remarks' },
   { title: t('common.create_time'), width: 200, ellipsis: true, colKey: 'create_time' },
   { align: 'left', width: 200, colKey: 'op', title: t('common.op') },

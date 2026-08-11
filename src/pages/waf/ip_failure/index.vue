@@ -6,6 +6,7 @@
           <div class="table-container">
             <div class="operation-container">
               <t-button theme="primary" @click="getList">{{ t('common.refresh') }}</t-button>
+              <ip-lookup ref="ipLookupRef" :style="{ marginLeft: '8px' }" />
             </div>
             <t-table
               :columns="columns"
@@ -17,6 +18,11 @@
               :loading="dataLoading"
               @page-change="rehandlePageChange"
             >
+              <template #ip="{ row }">
+                <t-tooltip :content="t('common.ip_lookup.click_tip')">
+                  <a class="ipl-link" @click="openIpLookup(row.ip)">{{ row.ip }}</a>
+                </t-tooltip>
+              </template>
               <template #op="slotProps">
                 <a class="t-button-link" @click="handleClickDetail(slotProps)">{{ t('common.details') }}</a>
                 <a class="t-button-link" style="margin-left: 8px" @click="handleClickUnban(slotProps)">{{ t('page.ip_failure.unban') }}</a>
@@ -106,6 +112,13 @@ import { useI18n } from 'vue-i18n';
 import { DialogPlugin, MessagePlugin, type FormProps, type PageInfo, type TableProps } from 'tdesign-vue-next';
 import { InfoCircleIcon, ArrowRightIcon } from 'tdesign-icons-vue-next';
 import WebLogList from '@/pages/waf/attack/index.vue';
+
+// 点列表里的 IP 直接开归属查询，省得用户复制粘贴
+const ipLookupRef = ref<any>(null);
+function openIpLookup(ip: string) {
+  if (!ip) return;
+  ipLookupRef.value?.open(ip);
+}
 import {
   wafIPFailureGetConfigApi,
   wafIPFailureSetConfigApi,
@@ -134,7 +147,7 @@ const pagination = reactive({ total: 0, current: 1, pageSize: 10 });
 const rowKey = 'ip';
 
 const columns = computed<TableProps['columns']>(() => [
-  { title: t('page.ip_failure.ip'), colKey: 'ip', width: 150 },
+  { title: t('page.ip_failure.ip'), colKey: 'ip', cell: 'ip', width: 150 },
   { title: t('page.ip_failure.fail_count'), colKey: 'fail_count', width: 100 },
   { title: t('page.ip_failure.trigger_minutes'), colKey: 'trigger_minutes', width: 120 },
   { title: t('page.ip_failure.trigger_count'), colKey: 'trigger_count', width: 120 },

@@ -1,8 +1,11 @@
 <template>
   <div>
-    <help-block :summary="t('page.attack_log.attack_log')" doc="guide/AttackLog" />
+    <help-block :summary="t('page.attack_log.attack_log')" doc="guide/AttackLog">
+      <template #actions><ip-lookup ref="ipLookupRef" /></template>
+    </help-block>
     <t-card class="list-card-container">
-      <t-tabs v-model="attackSearchformData.rule">
+      <!-- 切 tab 直接查，不用再点一次「查询」 -->
+      <t-tabs v-model="attackSearchformData.rule" @change="handleTabChange">
         <t-tab-panel v-for="(item, index) in attackTags" :key="index" :value="item.value" :label="item.label"> </t-tab-panel>
       </t-tabs>
       <t-row justify="space-between">
@@ -54,10 +57,10 @@
             <t-tag v-if="row.rule !== ''" shape="round" theme="primary" variant="outline">{{ row.rule }}</t-tag>
           </template>
           <template #ip="{ row }">
-            <span>{{ row.ip }}</span>
-            <t-button theme="primary" shape="round" size="small" style="margin-left: 8px" @click="handleAddipblock(row)">
-              {{ t('page.visit_log.detail.add_to_deny_list') }}
-            </t-button>
+            <!-- 点 IP 直接开归属查询：排查时最想知道的就是「这个IP现在被什么拦着」 -->
+            <t-tooltip :content="t('common.ip_lookup.click_tip')">
+              <a class="ipl-link" @click="openIpLookup(row.ip)">{{ row.ip }}</a>
+            </t-tooltip>
           </template>
           <template #op="slotProps">
             <a class="t-button-link" @click="handleClickDetail(slotProps)">{{ t('common.details') }}</a>
@@ -148,8 +151,14 @@ import type { PageInfo, TableProps } from 'tdesign-vue-next';
 
 import WebLogList from './index.vue';
 import { allattacktaglist, attackIpListApi, deleteTagByNameApi } from '@/apis/waflog/attacklog';
-import { wafIPBlockAddApi } from '@/apis/ipblock';
 import { getOnlineUrl } from '@/utils/usuallytool';
+
+// 点列表里的 IP 直接开归属查询，省得用户复制粘贴
+const ipLookupRef = ref<any>(null);
+function openIpLookup(ip: string) {
+  if (!ip) return;
+  ipLookupRef.value?.open(ip);
+}
 
 const { t } = useI18n();
 
@@ -212,6 +221,12 @@ function getIpTags() {
   });
 }
 
+// 切 tab 等于换了查询条件，回第一页再拉；否则停在上一次的页码上容易看到空列表
+function handleTabChange() {
+  pagination.current = 1;
+  getList();
+}
+
 function getList(keyword?: string) {
   if (keyword !== undefined && keyword === 'all') {
     pagination.current = 1;
@@ -255,39 +270,6 @@ function handleClickDetail(e: { row: Record<string, any> }) {
   const { ip } = e.row;
   attackIpVisible.value = true;
   trans_to_parent_ip.value = ip;
-}
-
-function handleAddipblock(row: Record<string, any>) {
-  const { ip } = row;
-
-  const confirmDia = DialogPlugin.confirm({
-    header: t('page.visit_log.detail.add_to_deny_list_confirm_header'),
-    body: t('page.visit_log.detail.add_to_deny_list_confirm_body'),
-    confirmBtn: t('common.confirm'),
-    cancelBtn: t('common.cancel'),
-    onConfirm: () => {
-      // 攻击统计页面没有 host_code，使用空字符串（全局）
-      wafIPBlockAddApi({
-        host_code: '',
-        ip,
-        remarks: '手工增加',
-      })
-        .then((res) => {
-          if (res.code === 0) {
-            MessagePlugin.success(res.msg);
-          } else {
-            MessagePlugin.warning(res.msg);
-          }
-        })
-        .catch((e: Error) => {
-          console.log(e);
-        });
-      confirmDia.destroy();
-    },
-    onClose: () => {
-      confirmDia.hide();
-    },
-  });
 }
 
 // Jump Url

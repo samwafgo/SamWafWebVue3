@@ -29,7 +29,9 @@
           { label: t('page.threatip.doc_firewall'), doc: 'guide/FirewallIPBlock' },
         ]"
         storage-key="threatip"
-      />
+      >
+        <template #actions><ip-lookup ref="ipLookupRef" /></template>
+      </help-block>
       <div class="table-container">
         <t-table
           :columns="columns"

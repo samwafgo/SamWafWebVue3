@@ -1,6 +1,8 @@
 <template>
   <div>
-    <help-block :summary="t('page.visit_log.visit_log')" doc="guide/VisitLog" />
+    <help-block :summary="t('page.visit_log.visit_log')" doc="guide/VisitLog">
+      <template #actions><ip-lookup ref="ipLookupRef" /></template>
+    </help-block>
 
     <!-- 日志配置区域 -->
     <t-card class="log-config-card" style="margin-bottom: 16px">
@@ -254,10 +256,10 @@
             <span>{{ host_nickname_dic[row.host_code] || '-' }}</span>
           </template>
           <template #src_ip="{ row }">
-            <span>{{ row.src_ip }}</span>
-            <t-button theme="primary" shape="round" size="small" style="margin-left: 8px" @click="handleAddipblock(row)">
-              {{ t('page.visit_log.detail.add_to_deny_list') }}
-            </t-button>
+            <!-- 点 IP 直接开归属查询：排查时最想知道的就是「这个IP现在被什么拦着」 -->
+            <t-tooltip :content="t('common.ip_lookup.click_tip')">
+              <a class="ipl-link" @click="openIpLookup(row.src_ip)">{{ row.src_ip }}</a>
+            </t-tooltip>
           </template>
           <template #op="slotProps">
             <a v-if="attack_ip === ''" class="t-button-link" @click="handleClickIPDetail(slotProps)">{{
@@ -440,12 +442,18 @@ import VisitDetailPage from './detail/index.vue';
 import { allsharedblist, attacklogVisitListApi, exportlog } from '@/apis/waflog/attacklog';
 import { aiLabelByUuidsApi, aiMarkLabelApi, aiUnmarkLabelApi } from '@/apis/ai';
 import { allhost } from '@/apis/host';
-import { wafIPBlockAddApi } from '@/apis/ipblock';
 import { edit_system_config_api, get_detail_by_item_api } from '@/apis/systemconfig';
 import { get_ui_preference_api, save_ui_preference_api } from '@/apis/uipreference';
 import { ConvertStringToUnix, ConvertUnixToDate, NowDate } from '@/utils/date';
 import { getOnlineUrl } from '@/utils/usuallytool';
 import { useAttackLogStore } from '@/store/modules/attacklog';
+
+// 点列表里的 IP 直接开归属查询，省得用户复制粘贴
+const ipLookupRef = ref<any>(null);
+function openIpLookup(ip: string) {
+  if (!ip) return;
+  ipLookupRef.value?.open(ip);
+}
 
 const props = defineProps({
   attack_ip: {
@@ -1365,44 +1373,6 @@ function resetState() {
   dateControl.range1 = [`${NowDate} 00:00:00`, `${NowDate} 23:59:59`];
   searchformData.value.unix_add_time_begin = ConvertStringToUnix(dateControl.range1[0]).toString();
   searchformData.value.unix_add_time_end = ConvertStringToUnix(dateControl.range1[1]).toString();
-}
-
-function handleAddipblock(row: Record<string, any>) {
-  const ip = row.src_ip;
-  const hostCode = row.host_code;
-
-  if (!hostCode) {
-    MessagePlugin.warning('当前网站不存在');
-    return;
-  }
-
-  const confirmDia = DialogPlugin.confirm({
-    header: t('page.visit_log.detail.add_to_deny_list_confirm_header'),
-    body: t('page.visit_log.detail.add_to_deny_list_confirm_body'),
-    confirmBtn: t('common.confirm'),
-    cancelBtn: t('common.cancel'),
-    onConfirm: () => {
-      wafIPBlockAddApi({
-        host_code: hostCode,
-        ip,
-        remarks: '手工增加',
-      })
-        .then((res) => {
-          if (res.code === 0) {
-            MessagePlugin.success(res.msg);
-          } else {
-            MessagePlugin.warning(res.msg);
-          }
-        })
-        .catch((e: Error) => {
-          console.log(e);
-        });
-      confirmDia.destroy();
-    },
-    onClose: () => {
-      confirmDia.hide();
-    },
-  });
 }
 
 // 切换日志配置区域显示/隐藏

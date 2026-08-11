@@ -1,7 +1,9 @@
 <template>
   <div>
     <t-card class="list-card-container">
-      <help-block :summary="t('page.cdnip.alert_message')" doc="guide/CDNIP" style="margin-bottom: 12px" />
+      <help-block :summary="t('page.cdnip.alert_message')" doc="guide/CDNIP" style="margin-bottom: 12px">
+        <template #actions><ip-lookup ref="ipLookupRef" /></template>
+      </help-block>
       <t-table :columns="columns" :data="data" row-key="provider" vertical-align="top" hover :loading="loading">
         <template #tier="{ row }">
           <t-tag v-if="row.tier === 'A'" theme="success" variant="light">{{ t('page.cdnip.tier_public') }}</t-tag>
@@ -130,7 +132,14 @@
         :pagination="ipPagination"
         :loading="ipLoading"
         @page-change="onIPPageChange"
-      />
+      >
+        <template #ip="{ row }">
+          <!-- 列表里是网段，点了按其中一个代表IP查，弹窗会说明查的是哪个 -->
+          <t-tooltip :content="t('common.ip_lookup.click_tip')">
+            <a class="ipl-link" @click="openIpLookup(row.ip)">{{ row.ip }}</a>
+          </t-tooltip>
+        </template>
+      </t-table>
     </t-dialog>
   </div>
 </template>
@@ -139,6 +148,13 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin, type PageInfo, type TableProps } from 'tdesign-vue-next';
+
+// 点列表里的 IP 直接开归属查询，省得用户复制粘贴
+const ipLookupRef = ref<any>(null);
+function openIpLookup(ip: string) {
+  if (!ip) return;
+  ipLookupRef.value?.open(ip);
+}
 import {
   wafCDNProviderListApi,
   wafCDNProviderAutoFetchApi,
@@ -222,7 +238,9 @@ const ipSearch = reactive({ keyword: '' });
 const ipLoading = ref(false);
 const ipData = ref<Record<string, any>[]>([]);
 const ipPagination = reactive({ total: 0, current: 1, pageSize: 10 });
-const ipColumns = computed<TableProps['columns']>(() => [{ title: 'IP / CIDR', align: 'left', colKey: 'ip' }]);
+const ipColumns = computed<TableProps['columns']>(() => [
+  { title: 'IP / CIDR', align: 'left', colKey: 'ip', cell: 'ip' },
+]);
 
 function formatTs(ts: number) {
   if (!ts) return '-';
