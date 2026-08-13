@@ -21,8 +21,21 @@ const env = import.meta.env.MODE || 'development';
 const statsStore = useStatsStore();
 const notificationStore = useNotificationStore();
 
+// WebSocket 断线重连的指数退避参数。
+// 后端会主动踢掉写超时(5s)/读超时(90s)的死连接，掉线后固定等 10s 再连的话，
+// 这段空窗期内的即时通知(IP封禁、操作结果等)是收不到的——服务端不补发。
+// 所以改成 1s 起、每次翻倍、封顶 10s：偶发断开几乎无感，后端真挂了也不会疯狂重试。
+const WS_RECONNECT_BASE_DELAY = 1000;
+const WS_RECONNECT_MAX_DELAY = 10000;
+// 连接活过这个时长才算「连上过」，重连间隔才复位。
+// 否则鉴权失败(-999)这类「一连上就被踢」的场景会退化成 1s 一次的死循环。
+const WS_STABLE_THRESHOLD = 30000;
+
 let ws: WebSocket | null = null;
 let disConnectTimer: ReturnType<typeof setTimeout> | null = null;
+let reconnectDelay = WS_RECONNECT_BASE_DELAY;
+let wsOpenedAt = 0;
+let wsGeneration = 0;
 let reloadDialog: ReturnType<typeof DialogPlugin> | null = null;
 
 function getSecurityPath(): string {
@@ -42,26 +55,73 @@ function initWebSocket() {
     env === 'development'
       ? `ws://127.0.0.1:26666${secPath}/api/v1/ws`
       : `${isHttps ? 'wss' : 'ws'}://${window.location.host}${secPath}/api/v1/ws`;
+  // 代次：本次连接的身份标记。旧连接的事件迟到时靠它识别并丢弃，
+  // 否则「已废弃连接的 close 事件」会把 ws（此时已指向新的活连接）置空并再排一次重连，
+  // 于是又漏出一条连接——线上就是这样一路裂变出十几条并存连接，
+  // 一条广播被同一个页面收 N 次，通知就重复 N 条。
+  const gen = ++wsGeneration;
   ws = websocket.useWebSocket(
     url,
     localStorage.getItem('access_token') || '',
-    null,
-    wsOnMessage,
-    wsOnClose,
-    wsOnError,
+    () => wsOnOpen(gen),
+    (e) => wsOnMessage(e, gen),
+    () => wsOnClose(gen),
+    (e) => wsOnError(e, gen),
     [],
     30000, // 心跳间隔：30秒
     false, // 关闭工具内部重连，统一由 App.vue 控制
   );
 }
 
-function wsOnError(e: Event) {
-  console.log(e, '消息通知错误回调，重新连接');
-  ws = null;
-  initWebSocket();
+// 是否为当前连接发来的事件；过期连接的一律忽略
+function isCurrentWs(gen: number) {
+  return gen === wsGeneration;
 }
 
-function wsOnMessage(e: MessageEvent) {
+function wsOnOpen(gen: number) {
+  if (!isCurrentWs(gen)) return;
+  wsOpenedAt = Date.now();
+}
+
+// 统一的重连入口：onerror 与 onclose 都走这里。
+// 一次断开通常会先后触发 error 和 close 两个事件，靠 disConnectTimer 去重，
+// 避免像以前那样 error 里立刻重连、close 里又排一次，连出两条连接。
+function scheduleReconnect(gen: number) {
+  if (!isCurrentWs(gen)) return; // 旧连接的迟到事件，不能影响当前连接
+  if (disConnectTimer) return;
+
+  // 连接稳定活过一段时间再断，视为偶发掉线，退避间隔复位
+  if (wsOpenedAt && Date.now() - wsOpenedAt >= WS_STABLE_THRESHOLD) {
+    reconnectDelay = WS_RECONNECT_BASE_DELAY;
+  }
+  wsOpenedAt = 0;
+  // 显式关掉被丢弃的连接：不关的话它在服务端一直活着、继续收广播，
+  // 页面里它的监听器也还在，就会把同一条通知重复推进 store。
+  // 它迟到的 close 事件会被上面的代次校验挡掉，不会再触发一次重连。
+  try {
+    ws?.close();
+  } catch {
+    /* ignore */
+  }
+  ws = null;
+
+  const delay = reconnectDelay;
+  console.log(`WebSocket 已断开，${delay}ms 后重连`);
+  disConnectTimer = setTimeout(() => {
+    disConnectTimer = null;
+    initWebSocket();
+  }, delay);
+  reconnectDelay = Math.min(reconnectDelay * 2, WS_RECONNECT_MAX_DELAY);
+}
+
+function wsOnError(e: Event, gen: number) {
+  console.log(e, '消息通知错误回调，重新连接');
+  scheduleReconnect(gen);
+}
+
+function wsOnMessage(e: MessageEvent, gen: number) {
+  // 僵尸连接（已被丢弃但服务端还在推）的消息一律丢掉，否则同一条通知会重复入库
+  if (!isCurrentWs(gen)) return;
   if (e.data === 'pong') {
     return;
   }
@@ -120,15 +180,9 @@ function wsOnMessage(e: MessageEvent) {
   }
 }
 
-function wsOnClose() {
-  // 意外关闭之后重新连接
-  if (!disConnectTimer) {
-    ws = null;
-    disConnectTimer = setTimeout(() => {
-      initWebSocket();
-      disConnectTimer = null;
-    }, 10000);
-  }
+function wsOnClose(gen: number) {
+  // 意外关闭之后重新连接（间隔按指数退避，见 scheduleReconnect）
+  scheduleReconnect(gen);
 }
 
 onMounted(() => {
