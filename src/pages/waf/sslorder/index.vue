@@ -475,7 +475,7 @@ const sslHttpCheckDialogVisible = ref(false);
 const sslHttpCheckFormData = ref<Record<string, any>>({
   item: 'sslhttp_check',
   value: '1',
-  remarks: '证书文件验证方式是否要严控后端.well-known响应代码',
+  remarks: '证书文件验证：本地挑战文件始终优先；本项仅控制本地无挑战文件且后端返回非404/301/302时是否写告警',
 });
 const sslHttpCheckRules: FormProps['rules'] = {
   item: [{ required: true, message: t('page.systemconfig.label_configuration_item'), type: 'error' }],
@@ -777,7 +777,7 @@ function handleSslHttpCheck() {
         sslHttpCheckFormData.value = {
           item: 'sslhttp_check',
           value: '1',
-          remarks: '证书文件验证方式是否要严控后端.well-known响应代码',
+          remarks: '证书文件验证：本地挑战文件始终优先；本项仅控制本地无挑战文件且后端返回非404/301/302时是否写告警',
         };
       }
       sslHttpCheckDialogVisible.value = true;
