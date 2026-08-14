@@ -33,6 +33,9 @@
           <template #attack_type="{ row }">
             <span>{{ getAttackTypeLabel(row.attack_type) }}</span>
           </template>
+          <template #content_priority="{ row }">
+            <span>{{ getContentPriorityLabel(row.content_priority) }}</span>
+          </template>
           <template #response_header="{ row }">
             <span v-for="(header, idx) in parseHeaders(row.response_header)" :key="idx">{{ header.name }}={{ header.value }}&nbsp;</span>
           </template>
@@ -69,8 +72,37 @@
         <t-form-item :label="t('page.blocking_page.response_code')" name="response_code">
           <t-input v-model="formData.response_code" :style="{ width: '480px' }" />
         </t-form-item>
+
+        <t-form-item :label="t('page.blocking_page.content_priority')" name="content_priority">
+          <div :style="{ width: '480px' }">
+            <t-radio-group v-model="formData.content_priority">
+              <t-radio-button v-for="item in contentPriorityOptions" :key="item.value" :value="item.value">
+                {{ item.label }}
+              </t-radio-button>
+            </t-radio-group>
+            <div class="priority-tip">
+              <div>{{ t('page.blocking_page.content_priority_desc.samwaf') }}</div>
+              <div>{{ t('page.blocking_page.content_priority_desc.backend') }}</div>
+              <div class="priority-tip-note">{{ t('page.blocking_page.content_priority_desc.note') }}</div>
+            </div>
+          </div>
+        </t-form-item>
+
         <t-form-item :label="t('page.blocking_page.response_content')" name="response_content">
-          <t-textarea v-model="formData.response_content" name="response_content" :autosize="{ minRows: 10, maxRows: 11 }" />
+          <div style="width: 100%">
+            <t-radio-group v-model="previewModeAdd" variant="default-filled" size="small" style="margin-bottom: 8px">
+              <t-radio-button value="code">{{ t('page.blocking_page.editor_mode.code') }}</t-radio-button>
+              <t-radio-button value="preview">{{ t('page.blocking_page.editor_mode.preview') }}</t-radio-button>
+            </t-radio-group>
+            <t-textarea
+              v-show="previewModeAdd === 'code'"
+              v-model="formData.response_content"
+              name="response_content"
+              :autosize="{ minRows: 10, maxRows: 11 }"
+            />
+            <!-- sandbox 置空：预览框内不允许执行脚本、不同源，避免模板里的 JS 在管理端被执行 -->
+            <iframe v-show="previewModeAdd === 'preview'" class="preview-frame" sandbox="" :srcdoc="previewHtmlAdd"></iframe>
+          </div>
         </t-form-item>
         <t-form-item :label="t('page.blocking_page.response_header')" name="response_header">
           <div style="width: 100%">
@@ -118,8 +150,36 @@
           <t-input v-model="formEditData.response_code" :style="{ width: '480px' }" />
         </t-form-item>
 
+        <t-form-item :label="t('page.blocking_page.content_priority')" name="content_priority">
+          <div :style="{ width: '480px' }">
+            <t-radio-group v-model="formEditData.content_priority">
+              <t-radio-button v-for="item in contentPriorityOptions" :key="item.value" :value="item.value">
+                {{ item.label }}
+              </t-radio-button>
+            </t-radio-group>
+            <div class="priority-tip">
+              <div>{{ t('page.blocking_page.content_priority_desc.samwaf') }}</div>
+              <div>{{ t('page.blocking_page.content_priority_desc.backend') }}</div>
+              <div class="priority-tip-note">{{ t('page.blocking_page.content_priority_desc.note') }}</div>
+            </div>
+          </div>
+        </t-form-item>
+
         <t-form-item :label="t('page.blocking_page.response_content')" name="response_content">
-          <t-textarea v-model="formEditData.response_content" name="response_content" :autosize="{ minRows: 10, maxRows: 11 }" />
+          <div style="width: 100%">
+            <t-radio-group v-model="previewModeEdit" variant="default-filled" size="small" style="margin-bottom: 8px">
+              <t-radio-button value="code">{{ t('page.blocking_page.editor_mode.code') }}</t-radio-button>
+              <t-radio-button value="preview">{{ t('page.blocking_page.editor_mode.preview') }}</t-radio-button>
+            </t-radio-group>
+            <t-textarea
+              v-show="previewModeEdit === 'code'"
+              v-model="formEditData.response_content"
+              name="response_content"
+              :autosize="{ minRows: 10, maxRows: 11 }"
+            />
+            <!-- sandbox 置空：预览框内不允许执行脚本、不同源，避免模板里的 JS 在管理端被执行 -->
+            <iframe v-show="previewModeEdit === 'preview'" class="preview-frame" sandbox="" :srcdoc="previewHtmlEdit"></iframe>
+          </div>
         </t-form-item>
 
         <t-form-item :label="t('page.blocking_page.response_header')" name="response_header">
@@ -174,9 +234,18 @@ const INITIAL_DATA = {
   response_code: '403',
   response_header: '',
   response_content: '',
+  content_priority: 'samwaf',
 };
 
 const DEFAULT_HEADER_LIST = [{ name: 'Content-Type', value: 'text/html' }];
+
+// 预览时用来替换模板占位符的演示数据（后端模板分隔符是 [[ ]]，变量形如 [[.SAMWAF_REQ_UUID]]）
+const PREVIEW_PLACEHOLDER_VALUES: Record<string, string> = {
+  SAMWAF_REQ_UUID: 'PREVIEW-0000-0000-0000',
+  SAMWAF_BACKEND_STATUS: '403 Forbidden',
+  SAMWAF_BACKEND_CODE: '403',
+  SAMWAF_BACKEND_BODY: '{"code":403,"message":"forbidden"}',
+};
 
 const { t } = useI18n();
 
@@ -201,6 +270,7 @@ const columns = computed<TableProps['columns']>(() => [
   { title: t('page.blocking_page.host_code'), width: 200, ellipsis: true, colKey: 'host_code' },
   { title: t('page.blocking_page.attack_type'), width: 150, ellipsis: true, colKey: 'attack_type' },
   { title: t('page.blocking_page.response_code'), width: 200, ellipsis: true, colKey: 'response_code' },
+  { title: t('page.blocking_page.content_priority'), width: 180, ellipsis: true, colKey: 'content_priority' },
   { title: t('page.blocking_page.response_header'), width: 200, ellipsis: true, colKey: 'response_header' },
   { align: 'left', fixed: 'right', width: 200, colKey: 'op', title: t('common.op') },
 ]);
@@ -229,6 +299,16 @@ const attackTypeOptions = computed(() => [
   { label: t('page.blocking_page.attack_type_option.plugin_block'), value: 'plugin_block' },
 ]);
 
+// 内容优先级选项
+const contentPriorityOptions = computed(() => [
+  { label: t('page.blocking_page.content_priority_option.samwaf'), value: 'samwaf' },
+  { label: t('page.blocking_page.content_priority_option.backend'), value: 'backend' },
+]);
+
+// 响应内容编辑区模式：code=HTML代码(默认) preview=样式预览
+const previewModeAdd = ref<'code' | 'preview'>('code');
+const previewModeEdit = ref<'code' | 'preview'>('code');
+
 // 响应 header 编辑列表（新增/编辑共用）
 const response_header_list = ref<{ name: string; value: string }[]>([...DEFAULT_HEADER_LIST]);
 
@@ -238,6 +318,29 @@ const confirmBody = computed(() => {
   }
   return '';
 });
+
+// 把模板占位符替换成演示数据后给预览用
+function buildPreviewHtml(content: string) {
+  if (!content) {
+    return '';
+  }
+  const demo: Record<string, string> = {
+    ...PREVIEW_PLACEHOLDER_VALUES,
+    SAMWAF_BLOCK_INFO: t('page.blocking_page.preview_demo_block_info'),
+  };
+  return content.replace(/\[\[\s*\.?([A-Za-z0-9_]+)\s*\]\]/g, (match, key: string) =>
+    Object.prototype.hasOwnProperty.call(demo, key) ? demo[key] : match,
+  );
+}
+
+const previewHtmlAdd = computed(() => buildPreviewHtml(formData.value.response_content));
+const previewHtmlEdit = computed(() => buildPreviewHtml(formEditData.value.response_content));
+
+// 空值按默认的"优先使用SamWaf自定义模版"显示
+function getContentPriorityLabel(contentPriority: string) {
+  const option = contentPriorityOptions.value.find((opt) => opt.value === (contentPriority || 'samwaf'));
+  return option ? option.label : contentPriority;
+}
 
 function getAttackTypeLabel(attackType: string) {
   if (!attackType || attackType === '') {
@@ -309,12 +412,14 @@ function rehandlePageChange(pageInfo: PageInfo) {
 
 function handleClickEdit(e: { row: Record<string, any> }) {
   editFormVisible.value = true;
+  previewModeEdit.value = 'code';
   response_header_list.value = parseHeaders(e.row.response_header);
   getDetail(e.row.id);
 }
 
 function handleAdd() {
   addFormVisible.value = true;
+  previewModeAdd.value = 'code';
   formData.value = { ...INITIAL_DATA };
   response_header_list.value = [...DEFAULT_HEADER_LIST.map((h) => ({ ...h }))];
 }
@@ -415,6 +520,8 @@ function getDetail(id: string | number) {
           ...res.data,
           // attack_type 为空值时显示为空字符串，匹配"通用"选项
           attack_type: res.data.attack_type || '',
+          // 老数据没有该字段，按默认的"优先使用SamWaf自定义模版"回填
+          content_priority: res.data.content_priority || 'samwaf',
         };
       }
     })
@@ -433,5 +540,25 @@ onMounted(() => {
 .left-operation-container {
   padding: 0 0 6px 0;
   margin-bottom: 16px;
+}
+
+.priority-tip {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--td-text-color-secondary);
+}
+
+.priority-tip-note {
+  margin-top: 4px;
+  color: var(--td-text-color-placeholder);
+}
+
+.preview-frame {
+  width: 100%;
+  height: 320px;
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-default);
+  background-color: #fff;
 }
 </style>
