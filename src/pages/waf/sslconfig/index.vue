@@ -66,7 +66,7 @@
       </t-form>
     </t-dialog>
 
-    <t-dialog v-model:visible="editFormVisible" :header="t('common.edit')" :width="750" :footer="false">
+    <t-dialog v-model:visible="editFormVisible" :header="t('common.edit')" :width="820" :footer="false">
       <t-form :data="formEditData" :rules="rules" :label-width="220" @submit="onSubmitEdit">
         <t-form-item :label="t('page.ssl.label_valid_to')" name="valid_to">
           <span>{{ formEditData.valid_to }} ({{ formEditData.expiration_info }})</span>
@@ -94,23 +94,63 @@
             </t-button>
           </div>
         </t-form-item>
-        <t-form-item>
-          <b>{{ t('page.ssl.label_auto_tip') }}</b>
-        </t-form-item>
-        <t-form-item :label="t('page.ssl.label_auto_load_path_switch')" name="auto_load_path">
-          <div>
-            <t-switch v-model="formEditData.auto_load_path" :custom-value="[1, 0]" />
-            <div style="color: #909399; font-size: 12px; margin-top: 4px; line-height: 1.5; max-width: 480px">
-              {{ t('page.ssl.label_auto_load_path_tip') }}
-            </div>
+        <!-- 「入」：从磁盘读进来 -->
+        <div class="cert-path-block cert-path-block--in">
+          <div class="cert-path-block__header">
+            <span class="cert-path-block__badge cert-path-block__badge--in">
+              {{ t('page.ssl.label_path_direction_in') }}
+            </span>
+            <span class="cert-path-block__desc">{{ t('page.ssl.label_import_tip') }}</span>
           </div>
-        </t-form-item>
-        <t-form-item :label="t('page.ssl.label_auto_key_path')" name="key_path">
-          <t-textarea v-model="formEditData.key_path" :style="{ width: '480px' }" :autosize="{ minRows: 4, maxRows: 4 }" />
-        </t-form-item>
-        <t-form-item :label="t('page.ssl.label_auto_crt_path')" name="cert_path">
-          <t-textarea v-model="formEditData.cert_path" :style="{ width: '480px' }" :autosize="{ minRows: 4, maxRows: 4 }" />
-        </t-form-item>
+          <t-form-item :label="t('page.ssl.label_auto_load_path_switch')" name="auto_load_path">
+            <!-- 宽度写成内联样式：t-form-item 的内容区是 flex，类选择器会被框架规则盖掉，
+                 导致开关被拉伸成整行、说明文字撑出边框 -->
+            <div class="cert-path-block__field" :style="{ width: '480px' }">
+              <t-switch v-model="formEditData.auto_load_path" :custom-value="[1, 0]" />
+              <div class="cert-path-block__tip">{{ t('page.ssl.label_auto_load_path_tip') }}</div>
+            </div>
+          </t-form-item>
+          <t-form-item :label="t('page.ssl.label_auto_key_path')" name="key_path">
+            <t-textarea
+              v-model="formEditData.key_path"
+              :style="{ width: '480px' }"
+              :autosize="{ minRows: 3, maxRows: 3 }"
+            />
+          </t-form-item>
+          <t-form-item :label="t('page.ssl.label_auto_crt_path')" name="cert_path">
+            <t-textarea
+              v-model="formEditData.cert_path"
+              :style="{ width: '480px' }"
+              :autosize="{ minRows: 3, maxRows: 3 }"
+            />
+          </t-form-item>
+        </div>
+
+        <!-- 「出」：写到磁盘出去 -->
+        <div class="cert-path-block cert-path-block--out">
+          <div class="cert-path-block__header">
+            <span class="cert-path-block__badge cert-path-block__badge--out">
+              {{ t('page.ssl.label_path_direction_out') }}
+            </span>
+            <span class="cert-path-block__desc">{{ t('page.ssl.label_export_tip') }}</span>
+          </div>
+          <t-form-item :label="t('page.ssl.label_export_crt_path')" name="export_cert_path">
+            <t-input v-model="formEditData.export_cert_path" :style="{ width: '480px' }" clearable />
+          </t-form-item>
+          <t-form-item :label="t('page.ssl.label_export_key_path')" name="export_key_path">
+            <div class="cert-path-block__field" :style="{ width: '480px' }">
+              <t-input v-model="formEditData.export_key_path" clearable />
+              <div class="cert-path-block__tip">{{ t('page.ssl.label_export_path_tip') }}</div>
+            </div>
+          </t-form-item>
+          <t-form-item
+            v-if="formEditData.export_status"
+            :label="t('page.ssl.label_export_status')"
+            name="export_status"
+          >
+            <span class="cert-path-block__status">{{ formEditData.export_status }}</span>
+          </t-form-item>
+        </div>
         <t-form-item style="float: right">
           <t-button variant="outline" @click="editFormVisible = false">{{ t('common.close') }}</t-button>
           <t-button theme="primary" type="submit">{{ t('common.confirm') }}</t-button>
@@ -145,6 +185,8 @@ const INITIAL_DATA = {
   cert_path: '',
   key_path: '',
   auto_load_path: 1,
+  export_cert_path: '',
+  export_key_path: '',
 };
 
 const { t } = useI18n();
@@ -233,7 +275,8 @@ const onSubmit: FormProps['onSubmit'] = ({ firstError }) => {
     sslConfigAddApi({ ...formData.value }).then((res) => {
       if (res.code === 0) {
         getList();
-        MessagePlugin.success(t('common.success'));
+        // 后端会把证书导出的结果拼在消息里（成功路径/失败原因），原样展示
+        MessagePlugin.success(res.msg || t('common.success'));
         addFormVisible.value = false;
       } else {
         MessagePlugin.warning(res.msg);
@@ -246,6 +289,9 @@ const onSubmit: FormProps['onSubmit'] = ({ firstError }) => {
 
 function handleClickEdit(slotProps: { row: Record<string, any> }) {
   formEditData.value = { auto_load_path: 1, ...slotProps.row };
+  // 老数据这两列可能是 null，统一成空串，避免 t-input 的 v-model 拿到 null
+  formEditData.value.export_cert_path = slotProps.row.export_cert_path || '';
+  formEditData.value.export_key_path = slotProps.row.export_key_path || '';
   editFormVisible.value = true;
 }
 
@@ -254,7 +300,8 @@ const onSubmitEdit: FormProps['onSubmit'] = ({ firstError }) => {
     sslConfigEditApi({ ...formEditData.value }).then((res) => {
       if (res.code === 0) {
         getList();
-        MessagePlugin.success(t('common.success'));
+        // 后端会把证书导出的结果拼在消息里（成功路径/失败原因），原样展示
+        MessagePlugin.success(res.msg || t('common.success'));
         editFormVisible.value = false;
       } else {
         MessagePlugin.warning(res.msg);
@@ -356,5 +403,74 @@ onMounted(() => {
 
 .search-input {
   width: 200px;
+}
+
+/* 证书路径的两个方向：入(从磁盘读进来) / 出(写到磁盘出去)，用边框和色条分开，避免混淆 */
+.cert-path-block {
+  border: 1px solid #dcdcdc;
+  border-radius: 6px;
+  padding: 16px 16px 0;
+  margin-bottom: 16px;
+}
+
+.cert-path-block--in {
+  border-color: #bcd4ff;
+  background-color: #f7faff;
+}
+
+.cert-path-block--out {
+  border-color: #b5e2c8;
+  background-color: #f6fdf9;
+}
+
+.cert-path-block__header {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.cert-path-block__badge {
+  flex: none;
+  margin-right: 10px;
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.cert-path-block__badge--in {
+  background-color: #0052d9;
+}
+
+.cert-path-block__badge--out {
+  background-color: #00a870;
+}
+
+.cert-path-block__desc {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #444;
+}
+
+/* 输入框和它的说明文字必须竖排：直接并排放在 form-item 里会被 flex 挤窄输入框。
+   这里用普通块级容器而不是 flex 列——flex 的 align stretch 会把开关拉成整行。
+   宽度写在模板的内联样式里，避免被框架规则覆盖。 */
+.cert-path-block__field {
+  display: block;
+}
+
+.cert-path-block__tip {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #909399;
+}
+
+.cert-path-block__status {
+  max-width: 480px;
+  word-break: break-all;
 }
 </style>
