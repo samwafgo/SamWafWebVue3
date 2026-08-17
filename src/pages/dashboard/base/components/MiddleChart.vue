@@ -13,16 +13,28 @@
             />
           </div>
         </template>
-        <div id="monitorContainer" ref="monitorContainer" :style="{ width: '100%', height: `${resizeTime * 326}px` }"></div>
+        <div class="chart-wrap">
+          <div v-if="isLineEmpty" class="chart-empty">
+            <chart-line-icon class="chart-empty__icon" />
+            <span>{{ t('dashboard.empty_data') }}</span>
+          </div>
+          <div id="monitorContainer" ref="monitorContainer" :style="{ width: '100%', height: `${resizeTime * 326}px` }"></div>
+        </div>
       </t-card>
     </t-col>
     <t-col :xs="12" :xl="3">
       <t-card :title="t('dashboard.cycle_percent_title')" :subtitle="t('dashboard.cycle_percent_subtitle')" class="dashboard-chart-card">
-        <div
-          id="countContainer"
-          ref="countContainer"
-          :style="{ width: `${resizeTime * 326}px`, height: `${resizeTime * 300}px`, margin: '0 auto' }"
-        ></div>
+        <div class="chart-wrap">
+          <div v-if="isPieEmpty" class="chart-empty">
+            <chart-pie-icon class="chart-empty__icon" />
+            <span>{{ t('dashboard.empty_data') }}</span>
+          </div>
+          <div
+            id="countContainer"
+            ref="countContainer"
+            :style="{ width: `${resizeTime * 326}px`, height: `${resizeTime * 300}px`, margin: '0 auto' }"
+          ></div>
+        </div>
       </t-card>
     </t-col>
   </t-row>
@@ -35,6 +47,7 @@ import * as echarts from 'echarts/core';
 import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
 import { LineChart, PieChart } from 'echarts/charts';
 import { CanvasRenderer } from 'echarts/renderers';
+import { ChartLineIcon, ChartPieIcon } from 'tdesign-icons-vue-next';
 
 import { LAST_7_DAYS } from '@/utils/date';
 import { getLineChartDataSet, getPieChartDataSet } from '../../index';
@@ -53,6 +66,8 @@ const rangeNormalArray = ref<number[]>([]);
 const rangeSumAttackCount = ref(0);
 const rangeSumNormalCount = ref(0);
 let isInitialed = false;
+const isLineEmpty = ref(false); // 折线图是否无数据
+const isPieEmpty = ref(false); // 环形图是否无数据
 
 let monitorChart: echarts.ECharts | null = null;
 let countChart: echarts.ECharts | null = null;
@@ -93,6 +108,9 @@ function loadSumDayRange() {
         rangeNormalArray.value.push(item);
         rangeSumNormalCount.value += item;
       }
+      // 空数据时展示空态
+      isLineEmpty.value = rangeDateTimeArray.value.length === 0;
+      isPieEmpty.value = rangeSumAttackCount.value + rangeSumNormalCount.value === 0;
       if (isInitialed === false) {
         renderCharts();
         isInitialed = true;
@@ -159,7 +177,33 @@ function renderCharts() {
 }
 
 .dashboard-chart-card :deep(.t-card__title) {
-  font-size: 20px;
-  font-weight: 500;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.dashboard-chart-card :deep(.t-card__subtitle) {
+  margin-left: 8px;
+}
+
+.chart-wrap {
+  position: relative;
+}
+
+.chart-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  z-index: 1;
+  color: var(--td-text-color-placeholder);
+  font-size: 14px;
+}
+
+.chart-empty__icon {
+  font-size: 28px;
+  opacity: 0.6;
 }
 </style>

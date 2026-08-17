@@ -1,157 +1,78 @@
 <template>
   <div class="stats-dashboard">
-    <t-card :bordered="false">
-      <template #header>
-        <div class="card-header">
-          <div class="title">{{ t('menu.dashboard.stats_title') }}</div>
-          <div class="subtitle">{{ t('dashboard.stats.update_frequency') }} | {{ t('dashboard.stats.last_update') }}: {{ lastUpdateTime }}</div>
+    <!-- 页面标题 + 实时状态 -->
+    <div class="stats-head">
+      <div class="stats-head__title">{{ t('menu.dashboard.stats_title') }}</div>
+      <div class="stats-head__subtitle">
+        <span class="live-dot"></span>
+        {{ t('dashboard.stats.update_frequency') }} · {{ t('dashboard.stats.last_update') }}: {{ lastUpdateTime }}
+      </div>
+    </div>
+
+    <!-- 实时指标 -->
+    <div class="stats-grid">
+      <div v-for="item in statCards" :key="item.key" class="stat-card" :class="`stat-card--${item.theme}`">
+        <div class="stat-card__label">{{ item.label }}</div>
+        <div v-if="!item.network" class="stat-card__value">
+          {{ item.value }}<span v-if="item.unit" class="stat-card__unit">{{ item.unit }}</span>
         </div>
+        <div v-else class="stat-card__network">
+          <div class="stat-card__network-line"><span class="network-dot network-dot--in"></span>{{ item.recv }}</div>
+          <div class="stat-card__network-line"><span class="network-dot network-dot--out"></span>{{ item.sent }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 趋势图表 -->
+    <div class="charts-grid">
+      <t-card :title="t('dashboard.stats.qps_trend')" class="chart-card">
+        <div ref="qpsChartRef" class="chart-box"></div>
+      </t-card>
+      <t-card :title="t('dashboard.stats.queue_trend')" class="chart-card">
+        <div ref="queueChartRef" class="chart-box"></div>
+      </t-card>
+      <t-card :title="t('dashboard.stats.response_time_trend')" class="chart-card">
+        <div ref="responseTimeChartRef" class="chart-box"></div>
+      </t-card>
+      <t-card :title="t('dashboard.stats.system_resource_trend')" class="chart-card">
+        <div ref="systemResourceChartRef" class="chart-box"></div>
+      </t-card>
+      <t-card :title="t('dashboard.stats.network_traffic_trend')" class="chart-card chart-card--full">
+        <div ref="networkTrafficChartRef" class="chart-box"></div>
+      </t-card>
+    </div>
+
+    <!-- 实时消息日志 -->
+    <t-card :title="t('dashboard.stats.realtime_log')" class="message-log">
+      <template #actions>
+        <t-button theme="primary" size="small" :disabled="recentMessages.length === 0" style="margin-right: 8px" @click="exportToCSV">
+          {{ t('dashboard.stats.export_csv') }}
+        </t-button>
+        <t-button theme="default" size="small" :disabled="recentMessages.length === 0" @click="clearMessages">
+          {{ t('dashboard.stats.clear_log') }}
+        </t-button>
       </template>
-      <div class="stats-header">
-        <t-row :gutter="16">
-          <t-col :span="2">
-            <t-card size="small" :bordered="true">
-              <div class="stat-item">
-                <div class="stat-value">{{ currentStats.qps || 0 }}</div>
-                <div class="stat-label">{{ t('dashboard.stats.current_qps') }}</div>
-              </div>
-            </t-card>
-          </t-col>
-          <t-col :span="2">
-            <t-card size="small" :bordered="true">
-              <div class="stat-item">
-                <div class="stat-value">{{ currentStats.log_qps || 0 }}</div>
-                <div class="stat-label">{{ t('dashboard.stats.log_qps') }}</div>
-              </div>
-            </t-card>
-          </t-col>
-          <t-col :span="2">
-            <t-card size="small" :bordered="true">
-              <div class="stat-item">
-                <div class="stat-value">{{ currentStats.main_queue || 0 }}</div>
-                <div class="stat-label">{{ t('dashboard.stats.main_queue') }}</div>
-              </div>
-            </t-card>
-          </t-col>
-          <t-col :span="2">
-            <t-card size="small" :bordered="true">
-              <div class="stat-item">
-                <div class="stat-value">{{ currentStats.log_queue || 0 }}</div>
-                <div class="stat-label">{{ t('dashboard.stats.log_queue') }}</div>
-              </div>
-            </t-card>
-          </t-col>
-        </t-row>
-      </div>
-
-      <div class="stats-header">
-        <t-row :gutter="16">
-          <t-col :span="2">
-            <t-card size="small" :bordered="true">
-              <div class="stat-item">
-                <div class="stat-value">{{ (currentStats.cpu_percent || 0).toFixed(1) }}%</div>
-                <div class="stat-label">{{ t('dashboard.stats.cpu_usage') }}</div>
-              </div>
-            </t-card>
-          </t-col>
-          <t-col :span="2">
-            <t-card size="small" :bordered="true">
-              <div class="stat-item">
-                <div class="stat-value">{{ (currentStats.memory_percent || 0).toFixed(1) }}%</div>
-                <div class="stat-label">{{ t('dashboard.stats.memory_usage') }}</div>
-              </div>
-            </t-card>
-          </t-col>
-          <t-col :span="2">
-            <t-card size="small" :bordered="true">
-              <div class="stat-item">
-                <div class="stat-value">{{ averageResponseTime }}ms</div>
-                <div class="stat-label">{{ t('dashboard.stats.avg_response_time') }}</div>
-              </div>
-            </t-card>
-          </t-col>
-          <t-col :span="2">
-            <t-card size="small" :bordered="true">
-              <div class="stat-item">
-                <div class="stat-value">{{ networkRecvRateFormatted }}</div>
-                <div class="stat-label">{{ t('dashboard.stats.network_recv_rate') }}</div>
-              </div>
-            </t-card>
-          </t-col>
-          <t-col :span="2">
-            <t-card size="small" :bordered="true">
-              <div class="stat-item">
-                <div class="stat-value">{{ networkSentRateFormatted }}</div>
-                <div class="stat-label">{{ t('dashboard.stats.network_sent_rate') }}</div>
-              </div>
-            </t-card>
-          </t-col>
-        </t-row>
-      </div>
-
-      <div class="charts-container">
-        <t-row :gutter="16">
-          <t-col :span="12">
-            <t-card :title="t('dashboard.stats.qps_trend')" size="small" :bordered="true">
-              <div ref="qpsChartRef" style="height: 300px"></div>
-            </t-card>
-          </t-col>
-          <t-col :span="12">
-            <t-card :title="t('dashboard.stats.queue_trend')" size="small" :bordered="true">
-              <div ref="queueChartRef" style="height: 300px"></div>
-            </t-card>
-          </t-col>
-          <t-col :span="12">
-            <t-card :title="t('dashboard.stats.response_time_trend')" size="small" :bordered="true">
-              <div ref="responseTimeChartRef" style="height: 300px"></div>
-            </t-card>
-          </t-col>
-          <t-col :span="12">
-            <t-card :title="t('dashboard.stats.system_resource_trend')" size="small" :bordered="true">
-              <div ref="systemResourceChartRef" style="height: 300px"></div>
-            </t-card>
-          </t-col>
-          <t-col :span="12">
-            <t-card :title="t('dashboard.stats.network_traffic_trend')" size="small" :bordered="true">
-              <div ref="networkTrafficChartRef" style="height: 300px"></div>
-            </t-card>
-          </t-col>
-        </t-row>
-      </div>
-
-      <div class="message-log">
-        <t-card :title="t('dashboard.stats.realtime_log')" size="small" :bordered="true">
-          <template #actions>
-            <t-button theme="primary" size="small" :disabled="recentMessages.length === 0" style="margin-right: 8px" @click="exportToCSV">
-              {{ t('dashboard.stats.export_csv') }}
-            </t-button>
-            <t-button theme="default" size="small" :disabled="recentMessages.length === 0" @click="clearMessages">
-              {{ t('dashboard.stats.clear_log') }}
-            </t-button>
-          </template>
-          <div class="log-container">
-            <div v-for="(message, index) in recentMessages" :key="index" class="log-item">
-              <span class="log-time">{{ formatTime(message.timestamp) }}</span>
-              <span class="log-operation">{{ message.operatype }}</span>
-              <span class="log-data">
-                {{ t('dashboard.stats.qps_label') }}: {{ message.qps }}, {{ t('dashboard.stats.log_qps_label') }}: {{ message.log_qps }},
-                {{ t('dashboard.stats.main_queue') }}: {{ message.main_queue }}, {{ t('dashboard.stats.log_queue') }}:
-                {{ message.log_queue }}, {{ t('dashboard.stats.stats_queue') }}: {{ message.stats_queue }},
-                {{ t('dashboard.stats.message_queue') }}: {{ message.message_queue }}, {{ t('dashboard.stats.cpu_usage') }}:
-                {{ message.cpu_percent }}%, {{ t('dashboard.stats.memory_usage') }}: {{ message.memory_percent }}%,
-                {{ t('dashboard.stats.network_recv_rate') }}: {{ formatBytes(message.network_recv_rate || 0) }},
-                {{ t('dashboard.stats.network_sent_rate') }}: {{ formatBytes(message.network_sent_rate || 0) }}
-              </span>
-            </div>
-          </div>
-        </t-card>
-      </div>
-
-      <!-- 系统监控组件 -->
-      <div class="system-monitor-section" style="margin-top: 16px">
-        <system-monitor />
+      <div class="log-container">
+        <div v-for="(message, index) in recentMessages" :key="index" class="log-item">
+          <span class="log-time">{{ formatTime(message.timestamp) }}</span>
+          <span class="log-operation">{{ message.operatype }}</span>
+          <span class="log-data">
+            {{ t('dashboard.stats.qps_label') }}: {{ message.qps }}, {{ t('dashboard.stats.log_qps_label') }}: {{ message.log_qps }},
+            {{ t('dashboard.stats.main_queue') }}: {{ message.main_queue }}, {{ t('dashboard.stats.log_queue') }}:
+            {{ message.log_queue }}, {{ t('dashboard.stats.stats_queue') }}: {{ message.stats_queue }},
+            {{ t('dashboard.stats.message_queue') }}: {{ message.message_queue }}, {{ t('dashboard.stats.cpu_usage') }}:
+            {{ message.cpu_percent }}%, {{ t('dashboard.stats.memory_usage') }}: {{ message.memory_percent }}%,
+            {{ t('dashboard.stats.network_recv_rate') }}: {{ formatBytes(message.network_recv_rate || 0) }},
+            {{ t('dashboard.stats.network_sent_rate') }}: {{ formatBytes(message.network_sent_rate || 0) }}
+          </span>
+        </div>
       </div>
     </t-card>
+
+    <!-- 系统监控 -->
+    <div class="system-monitor-section">
+      <system-monitor />
+    </div>
   </div>
 </template>
 
@@ -222,6 +143,46 @@ const currentStats = computed(
 const averageResponseTime = computed(() => statsStore.getAverageResponseTime);
 const networkRecvRateFormatted = computed(() => formatBytes(currentStats.value.network_recv_rate || 0));
 const networkSentRateFormatted = computed(() => formatBytes(currentStats.value.network_sent_rate || 0));
+
+// 顶部指标卡数据（统一由 computed 驱动）
+const statCards = computed(() => {
+  const fmt = (v: any) => (Number(v) || 0).toLocaleString('en-US');
+  return [
+    { key: 'qps', theme: 'primary', label: t('dashboard.stats.current_qps'), value: fmt(currentStats.value.qps) },
+    { key: 'log_qps', theme: 'primary', label: t('dashboard.stats.log_qps'), value: fmt(currentStats.value.log_qps) },
+    {
+      key: 'avg_response',
+      theme: 'primary',
+      label: t('dashboard.stats.avg_response_time'),
+      value: Math.round(Number(averageResponseTime.value) || 0),
+      unit: 'ms',
+    },
+    { key: 'main_queue', theme: 'warning', label: t('dashboard.stats.main_queue'), value: fmt(currentStats.value.main_queue) },
+    { key: 'log_queue', theme: 'warning', label: t('dashboard.stats.log_queue'), value: fmt(currentStats.value.log_queue) },
+    {
+      key: 'cpu',
+      theme: 'danger',
+      label: t('dashboard.stats.cpu_usage'),
+      value: (Number(currentStats.value.cpu_percent) || 0).toFixed(1),
+      unit: '%',
+    },
+    {
+      key: 'memory',
+      theme: 'danger',
+      label: t('dashboard.stats.memory_usage'),
+      value: (Number(currentStats.value.memory_percent) || 0).toFixed(1),
+      unit: '%',
+    },
+    {
+      key: 'network',
+      theme: 'success',
+      label: t('dashboard.stats.network_rate'),
+      network: true,
+      recv: networkRecvRateFormatted.value,
+      sent: networkSentRateFormatted.value,
+    },
+  ] as Array<Record<string, any>>;
+});
 
 watch(
   () => statsStore.statsHistory.length,
@@ -713,74 +674,208 @@ function exportToCSV() {
 
 <style scoped>
 .stats-dashboard {
-  padding: 20px;
+  padding: 0;
 }
 
-.card-header {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+/* 页面标题 + 实时状态 */
+.stats-head {
+  margin-bottom: 20px;
 }
 
-.card-header .title {
-  font-size: 16px;
+.stats-head__title {
+  font-size: 18px;
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
 
-.card-header .subtitle {
-  font-size: 12px;
+.stats-head__subtitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 13px;
   color: var(--td-text-color-secondary);
-  font-weight: normal;
 }
 
-.stats-header {
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--td-success-color);
+  box-shadow: 0 0 0 3px rgba(0, 168, 112, 0.15);
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot {
+    animation: none;
+  }
+}
+
+/* 实时指标卡片 */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
   margin-bottom: 20px;
 }
 
-.stat-item {
-  text-align: center;
-  padding: 10px;
+@media (max-width: 1100px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
-.stat-value {
-  font-size: 24px;
-  font-weight: bold;
-  color: #1890ff;
-  margin-bottom: 5px;
+@media (max-width: 560px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
-.stat-label {
-  font-size: 12px;
-  color: #666;
+.stat-card {
+  position: relative;
+  padding: 16px 18px 18px;
+  overflow: hidden;
+  border-radius: var(--td-radius-large);
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-stroke);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition:
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
 }
 
-.charts-container {
-  margin-bottom: 20px;
+.stat-card__label {
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--td-text-color-secondary);
 }
 
-.charts-container .t-card {
+.stat-card__value {
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--td-text-color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-card__unit {
+  margin-left: 4px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--td-text-color-placeholder);
+}
+
+.stat-card__network {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stat-card__network-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.network-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.network-dot--in {
+  background: var(--td-success-color);
+}
+
+.network-dot--out {
+  background: var(--td-brand-color);
+}
+
+/* 趋势图表 */
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 768px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.chart-card {
   overflow: hidden;
 }
 
+.chart-card :deep(.t-card__header) {
+  padding-bottom: 8px;
+}
+
+.chart-card :deep(.t-card__title) {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.chart-card--full {
+  grid-column: 1 / -1;
+}
+
+.chart-box {
+  width: 100%;
+  height: 300px;
+}
+
+/* 实时消息日志 */
 .message-log {
-  margin-top: 20px;
+  margin-bottom: 16px;
+}
+
+.message-log :deep(.t-card__header) {
+  padding-bottom: 8px;
+}
+
+.message-log :deep(.t-card__title) {
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .log-container {
-  max-height: 300px;
+  max-height: 320px;
   overflow-y: auto;
-  padding: 10px;
-  background-color: var(--td-bg-color-container-hover);
-  border-radius: 4px;
+  padding: 8px 12px;
+  background: var(--td-bg-color-secondarycontainer);
+  border: 1px solid var(--td-component-stroke);
+  border-radius: var(--td-radius-medium);
 }
 
 .log-item {
-  display: block;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
   padding: 8px 0;
-  border-bottom: 1px solid var(--td-component-border);
+  border-bottom: 1px solid var(--td-component-stroke);
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 .log-item:last-child {
@@ -788,17 +883,23 @@ function exportToCSV() {
 }
 
 .log-time {
-  color: #666;
-  margin-right: 10px;
-  font-weight: bold;
+  flex: none;
+  color: var(--td-text-color-secondary);
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
 }
 
 .log-operation {
-  color: #52c41a;
-  margin-right: 10px;
+  flex: none;
+  color: var(--td-brand-color);
+  font-weight: 600;
 }
 
 .log-data {
   color: var(--td-text-color-primary);
+  word-break: break-all;
+}
+
+.system-monitor-section {
+  margin: -16px;
 }
 </style>

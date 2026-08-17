@@ -160,14 +160,22 @@ const diskColumns = computed<TableProps['columns']>(() => [
   { colKey: 'usage_percent', title: t('page.monitor.disk_usage'), width: 200, align: 'center' },
 ]);
 
-const systemInfo = computed(
-  () =>
-    statsStore.currentSystemMonitor || {
-      cpu: { model_name: '', cores: 0, usage_percent: 0, physical_cnt: 0, logical_cnt: 0 },
-      memory: { total: '', available: '', used: '', usage_percent: 0, jvm_used: '', jvm_percent: 0 },
-      disk: [],
-    },
-);
+const EMPTY_CPU = { model_name: '', cores: 0, usage_percent: 0, physical_cnt: 0, logical_cnt: 0 };
+const EMPTY_MEMORY = { total: '', available: '', used: '', usage_percent: 0, jvm_used: '', jvm_percent: 0 };
+
+// 后端个别字段可能为 null/缺失：统一归一化，避免 t-table 对 null data 展开报错
+const systemInfo = computed(() => {
+  const data = statsStore.currentSystemMonitor as Record<string, any> | null | undefined;
+  if (!data) {
+    return { cpu: { ...EMPTY_CPU }, memory: { ...EMPTY_MEMORY }, disk: [] };
+  }
+  return {
+    ...data,
+    cpu: data.cpu || { ...EMPTY_CPU },
+    memory: data.memory || { ...EMPTY_MEMORY },
+    disk: Array.isArray(data.disk) ? data.disk : [],
+  };
+});
 
 onMounted(() => {
   fetchSystemInfo();

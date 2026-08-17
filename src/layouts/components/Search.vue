@@ -1,27 +1,51 @@
 <template>
   <div class="header-menu-search-left">
-    <t-select
-      v-model="searchData"
-      class="header-search"
-      filterable
-      clearable
-      :filter="filterSearch"
-      :options="searchOptions"
-      :placeholder="t('common.search')"
-      @change="handleNavigate"
+    <t-button
+      theme="default"
+      shape="square"
+      variant="text"
+      class="search-trigger-btn"
+      :title="t('common.search_page')"
+      @click="searchVisible = true"
     >
-      <template #prefix-icon>
-        <search-icon size="16" />
-      </template>
-    </t-select>
+      <search-icon />
+    </t-button>
+
+    <!-- 页面搜索：按钮 + 模态框 -->
+    <t-dialog
+      v-model:visible="searchVisible"
+      :header="t('common.search_page')"
+      :footer="false"
+      width="560px"
+      destroy-on-close
+      @closed="onDialogClosed"
+    >
+      <div class="search-dialog-body">
+        <t-select
+          v-model="searchData"
+          filterable
+          clearable
+          autofocus
+          :filter="filterSearch"
+          :options="searchOptions"
+          :placeholder="t('common.search_page_placeholder')"
+          @change="handleNavigate"
+        >
+          <template #prefix-icon>
+            <search-icon size="16" />
+          </template>
+        </t-select>
+        <p class="search-dialog-tip">{{ t('common.search_page_tip') }}</p>
+      </div>
+    </t-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
-import { useI18n } from 'vue-i18n';
 import { SearchIcon } from 'tdesign-icons-vue-next';
+import { computed, nextTick, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
 
 interface SearchOption {
   value: string;
@@ -31,6 +55,7 @@ interface SearchOption {
 const { t } = useI18n();
 const router = useRouter();
 
+const searchVisible = ref(false);
 const searchData = ref<string | null>(null);
 
 const searchOptions = computed<SearchOption[]>(() => {
@@ -63,6 +88,14 @@ function filterSearch(filterWords: string, option: any): boolean {
 function handleNavigate(path: any) {
   if (!path) return;
   router.push(String(path)).catch(() => {});
+  nextTick(() => {
+    searchData.value = null;
+    searchVisible.value = false;
+  });
+}
+
+// 关闭搜索模态框时重置输入
+function onDialogClosed() {
   searchData.value = null;
 }
 </script>
@@ -73,15 +106,14 @@ function handleNavigate(path: any) {
   align-items: center;
 }
 
-.header-search {
-  width: 200px;
+/* 搜索模态框 */
+.search-dialog-body {
+  padding-top: 8px;
 }
 
-.header-search :deep(.t-input) {
-  border: 0;
-}
-
-.header-search :deep(.t-input:focus) {
-  box-shadow: none;
+.search-dialog-tip {
+  margin: 12px 2px 0;
+  font-size: 12px;
+  color: var(--td-text-color-placeholder);
 }
 </style>

@@ -7,25 +7,41 @@
             <t-radio-button value="day">{{ t('dashboard.ip_rank.day') }}</t-radio-button>
             <t-radio-button value="week">{{ t('dashboard.ip_rank.week') }}</t-radio-button>
           </t-radio-group>
+          <!-- 只借它的弹窗，触发按钮不显示；两张榜共用这一个实例 -->
+          <ip-lookup ref="ipLookupRef" hide-trigger />
         </template>
-        <t-table :data="attackNowList" :columns="rankColumns" row-key="ip">
+        <t-table
+          :data="attackNowList"
+          :columns="rankColumns"
+          row-key="ip"
+          stripe
+          hover
+          :loading="loading"
+          :empty="t('dashboard.empty_data')"
+        >
           <template #index="{ rowIndex }">
-            <span :class="getRankClass(rowIndex)">
-              {{ rowIndex + 1 }}
-            </span>
+            <span :class="getRankClass(rowIndex)">{{ rowIndex + 1 }}</span>
+          </template>
+          <template #ip="{ row }">
+            <t-tooltip v-if="row.ip" :content="t('common.ip_lookup.click_tip')">
+              <a class="ipl-link" @click="openIpLookup(row.ip)">{{ row.ip }}</a>
+            </t-tooltip>
           </template>
           <template #iptags="{ row }">
-            <t-tag
-              v-for="(item, index) in row.ip_tags"
-              :key="index"
-              :theme="item.ip_tag === '正常' ? 'success' : 'danger'"
-              variant="light"
-              style="margin: 3px"
-              >{{ item.ip_tag }}</t-tag
-            >
+            <ip-tag-cell :ip="row.ip" :tags="row.ip_tags" @view-log="handleIpClick" />
           </template>
           <template #operation="{ row }">
-            <t-button v-if="row.ip" size="small" variant="text" @click="handleIpClick(row.ip)"> 🔍 </t-button>
+            <t-button
+              v-if="row.ip"
+              size="small"
+              variant="text"
+              shape="square"
+              class="rank-search-btn"
+              :aria-label="t('dashboard.ip_rank.lookup')"
+              @click="handleIpClick(row.ip)"
+            >
+              <search-icon />
+            </t-button>
           </template>
         </t-table>
       </t-card>
@@ -38,24 +54,38 @@
             <t-radio-button value="week">{{ t('dashboard.ip_rank.week') }}</t-radio-button>
           </t-radio-group>
         </template>
-        <t-table :data="normalNowList" :columns="rankColumns" row-key="ip">
+        <t-table
+          :data="normalNowList"
+          :columns="rankColumns"
+          row-key="ip"
+          stripe
+          hover
+          :loading="loading"
+          :empty="t('dashboard.empty_data')"
+        >
           <template #index="{ rowIndex }">
-            <span :class="getRankClass(rowIndex)">
-              {{ rowIndex + 1 }}
-            </span>
+            <span :class="getRankClass(rowIndex)">{{ rowIndex + 1 }}</span>
+          </template>
+          <template #ip="{ row }">
+            <t-tooltip v-if="row.ip" :content="t('common.ip_lookup.click_tip')">
+              <a class="ipl-link" @click="openIpLookup(row.ip)">{{ row.ip }}</a>
+            </t-tooltip>
           </template>
           <template #iptags="{ row }">
-            <t-tag
-              v-for="(item, index) in row.ip_tags"
-              :key="index"
-              :theme="item.ip_tag === '正常' ? 'success' : 'danger'"
-              variant="light"
-              style="margin: 3px"
-              >{{ item.ip_tag }}</t-tag
-            >
+            <ip-tag-cell :ip="row.ip" :tags="row.ip_tags" @view-log="handleIpClick" />
           </template>
           <template #operation="{ row }">
-            <t-button v-if="row.ip" size="small" variant="text" @click="handleIpClick(row.ip)"> 🔍 </t-button>
+            <t-button
+              v-if="row.ip"
+              size="small"
+              variant="text"
+              shape="square"
+              class="rank-search-btn"
+              :aria-label="t('dashboard.ip_rank.lookup')"
+              @click="handleIpClick(row.ip)"
+            >
+              <search-icon />
+            </t-button>
           </template>
         </t-table>
       </t-card>
@@ -64,13 +94,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
-import { useI18n } from 'vue-i18n';
+import { SearchIcon } from 'tdesign-icons-vue-next';
 import type { TableProps } from 'tdesign-vue-next';
+import { computed, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
 
-import { LAST_7_DAYS, NowDate } from '@/utils/date';
 import { wafstatsumdaytopiprangeapi } from '@/apis/stats';
+import { LAST_7_DAYS, NowDate } from '@/utils/date';
+
+import IpTagCell from './IpTagCell.vue';
 
 const { t } = useI18n();
 const router = useRouter();
@@ -78,17 +111,25 @@ const router = useRouter();
 const rankColumns = computed<TableProps['columns']>(() => [
   { align: 'center', colKey: 'index', title: t('dashboard.ip_rank.rank'), width: 80, fixed: 'left' },
   { align: 'left', ellipsis: true, colKey: 'ip', title: t('dashboard.ip_rank.ip'), minWidth: 100 },
-  { align: 'left', ellipsis: true, colKey: 'iptags', title: t('dashboard.ip_rank.tag'), minWidth: 200 },
+  { align: 'left', colKey: 'iptags', title: t('dashboard.ip_rank.tag'), minWidth: 200 },
   { align: 'center', colKey: 'ip_belong', width: 100, title: t('dashboard.ip_rank.ip_belong') },
   { align: 'center', colKey: 'count', title: t('dashboard.ip_rank.counter'), width: 100 },
   { align: 'center', colKey: 'operation', title: '操作', width: 60 },
 ]);
 
+const loading = ref(false);
 const rangeType = ref('day'); // 时间类型 日 周
 const rangeStartDay = ref('');
 const rangeEndDay = ref('');
 const attackNowList = ref<Record<string, any>[]>([]);
 const normalNowList = ref<Record<string, any>[]>([]);
+
+// 点列表里的 IP 直接开归属查询，和访问日志页一致
+const ipLookupRef = ref<any>(null);
+function openIpLookup(ip: string) {
+  if (!ip) return;
+  ipLookupRef.value?.open(ip);
+}
 
 onMounted(() => {
   setRangeValue();
@@ -106,6 +147,7 @@ function setRangeValue() {
 }
 
 function loadTopIp() {
+  loading.value = true;
   wafstatsumdaytopiprangeapi({ start_day: rangeStartDay.value, end_day: rangeEndDay.value })
     .then((res) => {
       attackNowList.value = fillEmptyRows(res.data.AttackIPOfRange || []);
@@ -113,6 +155,9 @@ function loadTopIp() {
     })
     .catch((e: Error) => {
       console.log(e);
+    })
+    .finally(() => {
+      loading.value = false;
     });
 }
 
@@ -127,7 +172,7 @@ function fillEmptyRows(list: Record<string, any>[]) {
 }
 
 function getRankClass(index: number) {
-  return ['dashboard-rank__cell', { 'dashboard-rank__cell--top': index < 3 }];
+  return ['dashboard-rank__cell', index < 3 ? `dashboard-rank__cell--${index + 1}` : ''];
 }
 
 function handelTimeChange(val: any) {
@@ -164,28 +209,68 @@ function handleIpClick(ip: string) {
 }
 
 .dashboard-rank-card :deep(.t-card__header) {
-  padding-bottom: 24px;
+  padding-bottom: 20px;
 }
 
 .dashboard-rank-card :deep(.t-card__title) {
-  font-size: 20px;
-  font-weight: 500;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.dashboard-rank-card :deep(.t-table__header th) {
+  background: var(--td-bg-color-component);
+  color: var(--td-text-color-secondary);
+  font-weight: 600;
+}
+
+.ipl-link {
+  color: var(--td-brand-color);
+  cursor: pointer;
+}
+
+.ipl-link:hover {
+  color: var(--td-brand-color-hover);
+  text-decoration: underline;
+}
+
+.rank-search-btn {
+  color: var(--td-text-color-placeholder);
+}
+
+.rank-search-btn:hover {
+  color: var(--td-brand-color);
 }
 
 .dashboard-rank__cell {
   display: inline-flex;
   width: 24px;
   height: 24px;
-  border-radius: 50%;
-  color: white;
-  font-size: 14px;
-  background-color: var(--td-gray-color-5);
+  border-radius: 8px;
   align-items: center;
   justify-content: center;
+  font-size: 13px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: var(--td-bg-color-component);
+  color: var(--td-text-color-secondary);
 }
 
-.dashboard-rank__cell--top {
-  background: var(--td-brand-color);
+/* 前三名奖牌色 */
+.dashboard-rank__cell--1 {
+  background: linear-gradient(135deg, #f7c94f, #e3a62d);
+  color: #fff;
+  box-shadow: 0 2px 6px -2px rgba(227, 166, 45, 0.5);
+}
+
+.dashboard-rank__cell--2 {
+  background: linear-gradient(135deg, #d3dbe6, #94a3b8);
+  color: #fff;
+  box-shadow: 0 2px 6px -2px rgba(148, 163, 184, 0.5);
+}
+
+.dashboard-rank__cell--3 {
+  background: linear-gradient(135deg, #e9a16b, #c67a3f);
+  color: #fff;
+  box-shadow: 0 2px 6px -2px rgba(198, 122, 63, 0.5);
 }
 </style>

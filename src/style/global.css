@@ -38,3 +38,92 @@ a:hover {
 a:active {
   color: var(--td-brand-color-active);
 }
+
+/* =====================================================
+ * 企业级外框架（顶栏 / 侧栏）
+ * 对应 Vue2 src/style/layout.less 的同名段落。
+ * Vue2 是 t-head-menu 顶栏布局，Vue3 是 t-layout + t-aside，
+ * 所以顶栏选择器换成本项目的 .app-header，侧栏 .t-default-menu 换成 .t-menu。
+ * ===================================================== */
+
+/* ---------- 顶栏 ---------- */
+.app-header {
+  border-bottom: 1px solid var(--td-component-stroke);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+/* ---------- 侧栏菜单 ---------- */
+.side-nav-menu {
+  border-right: 1px solid var(--td-component-stroke);
+}
+
+.side-nav-menu::-webkit-scrollbar,
+.side-nav-menu .t-menu::-webkit-scrollbar {
+  width: 6px;
+  background: transparent;
+}
+
+.side-nav-menu::-webkit-scrollbar-thumb,
+.side-nav-menu .t-menu::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: var(--td-scrollbar-color);
+}
+
+/* Logo 区：与顶栏同高 + 底部细分隔线 */
+.side-nav-menu .t-menu__logo {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--td-component-stroke);
+}
+
+/* 分组标题 */
+.side-nav-menu .t-menu-group__title {
+  padding: 14px 16px 6px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--td-text-color-placeholder);
+  letter-spacing: 0.4px;
+}
+
+/* 选中项：亮/暗色统一走品牌色（Vue2 原来只对亮色生效） */
+.side-nav-menu .t-menu__item.t-is-active:not(.t-is-opened) {
+  background-color: var(--td-brand-color-1);
+  color: var(--td-brand-color);
+  position: relative;
+}
+
+.side-nav-menu .t-menu__item.t-is-active:not(.t-is-opened) .t-icon {
+  color: var(--td-brand-color);
+}
+
+/* 展开态菜单项：圆角 + 呼吸间距 + 精致 hover */
+.side-nav-menu:not(.t-is-collapsed) .t-menu__item {
+  margin: 2px 8px;
+  border-radius: 8px;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.side-nav-menu:not(.t-is-collapsed) .t-menu__item .t-icon {
+  transition: color 0.2s ease;
+}
+
+.side-nav-menu:not(.t-is-collapsed) .t-menu__item:not(.t-is-active):not(.t-is-opened):hover {
+  background-color: var(--td-bg-color-component-hover);
+}
+
+/* 折叠态：图标项也带圆角与 hover */
+.side-nav-menu.t-is-collapsed .t-menu__item {
+  border-radius: 8px;
+}
+
+.side-nav-menu.t-is-collapsed .t-menu__item:not(.t-is-active):hover {
+  background-color: var(--td-bg-color-component-hover);
+}
+
+/* 暗色菜单 hover */
+.side-nav-menu.t-menu--dark .t-menu__item:not(.t-is-active):not(.t-is-opened):hover {
+  background-color: var(--td-gray-color-12);
+}
