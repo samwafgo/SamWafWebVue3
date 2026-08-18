@@ -392,6 +392,14 @@
                 <t-input-number v-model="formData.response_time_out" :style="{ width: '150px' }" />
               </t-tooltip>
             </t-form-item>
+            <t-form-item :label="t('page.host.response_buffering.label')" name="is_enable_response_buffering">
+              <t-tooltip :content="t('page.host.response_buffering.tips')" placement="top" :overlay-style="{ width: '260px' }" show-arrow>
+                <t-radio-group v-model="formData.is_enable_response_buffering">
+                  <t-radio value="1">{{ t('page.host.response_buffering.enable') }}</t-radio>
+                  <t-radio value="0">{{ t('page.host.response_buffering.disable') }}</t-radio>
+                </t-radio-group>
+              </t-tooltip>
+            </t-form-item>
             <t-form-item :label="t('page.host.default_encoding')" name="default_encoding">
               <t-select v-model="formData.default_encoding" :style="{ width: '150px' }">
                 <t-option value="auto" :label="t('page.host.default_encoding_auto')" />
@@ -953,6 +961,7 @@ watch(
     fd.is_enable_http_auth_base = fd.is_enable_http_auth_base != null ? fd.is_enable_http_auth_base.toString() : '0';
     fd.http_auth_base_type = fd.http_auth_base_type != null ? fd.http_auth_base_type : 'authorization';
     fd.response_time_out = fd.response_time_out != null ? Number(fd.response_time_out) : 60;
+    fd.is_enable_response_buffering = fd.is_enable_response_buffering != null ? fd.is_enable_response_buffering.toString() : '1';
     fd.insecure_skip_verify = fd.insecure_skip_verify != null ? fd.insecure_skip_verify.toString() : '0';
     fd.log_only_mode = fd.log_only_mode != null ? fd.log_only_mode.toString() : '0';
     fd.ip_mode = fd.ip_mode === 'proxy' ? 'proxy' : 'nic';
@@ -1469,6 +1478,7 @@ const onSubmit: FormProps['onSubmit'] = ({ validateResult, firstError }) => {
     postdata.is_trans_back_domain = Number(postdata.is_trans_back_domain);
     postdata.is_enable_http_auth_base = Number(postdata.is_enable_http_auth_base);
     postdata.response_time_out = Number(postdata.response_time_out);
+    postdata.is_enable_response_buffering = Number(postdata.is_enable_response_buffering);
     postdata.insecure_skip_verify = Number(postdata.insecure_skip_verify);
     postdata.log_only_mode = Number(postdata.log_only_mode);
 
