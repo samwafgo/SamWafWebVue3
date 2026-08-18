@@ -98,3 +98,21 @@ export function batchCopyConfig(data: Record<string, any>) {
     data,
   });
 }
+
+/** 查看最近到达的真实请求头(排查"真实IP来源"配置) */
+export function getIpSourceProbe(params: Record<string, any>) {
+  return request({
+    url: 'wafhost/host/ipsource/probe',
+    method: 'get',
+    params,
+  });
+}
+
+/** 清空真实IP来源诊断采样 */
+export function clearIpSourceProbe(params: Record<string, any>) {
+  return request({
+    url: 'wafhost/host/ipsource/probe/clear',
+    method: 'get',
+    params,
+  });
+}

@@ -292,13 +292,39 @@
                   <help-circle-icon class="host-form-ip-mode-help-icon" />
                 </t-tooltip>
               </template>
-              <t-select v-model="formData.ip_source_mode" :style="{ width: '320px' }" clearable>
-                <t-option value="" :label="t('page.host.ip_source_compat')" />
-                <t-option value="header" :label="t('page.host.ip_source_header')" />
-                <t-option value="xff_depth" :label="t('page.host.ip_source_xff')" />
-                <t-option value="cdn_preset" :label="t('page.host.ip_source_cdn')" />
-              </t-select>
-              <div class="limit-mode-desc">{{ ipSourceModeDesc }}</div>
+              <!-- t-form-item 内容区是 flex 行：多个同级子元素会被并排挤成窄列，统一包一层独占整行 -->
+              <div class="ip-source-block">
+                <t-select v-model="formData.ip_source_mode" :style="{ width: '320px' }" clearable>
+                  <t-option value="" :label="t('page.host.ip_source_compat')" />
+                  <t-option value="header" :label="t('page.host.ip_source_header')" />
+                  <t-option value="xff_depth" :label="t('page.host.ip_source_xff')" />
+                  <t-option value="cdn_preset" :label="t('page.host.ip_source_cdn')" />
+                </t-select>
+                <div class="limit-mode-desc">{{ ipSourceModeDesc }}</div>
+                <!-- 全局(系统配置 gwaf_proxy_header) 与 站点设置 谁生效，必须写在用户眼前，否则改了全局发现某站点没变会懵 -->
+                <div v-if="formData.ip_source_mode === ''" class="ip-source-scope">
+                  <t-alert v-if="globalProxyHeader" theme="info">
+                    <div>
+                      {{ t('page.host.ip_scope_inherit', { header: globalProxyHeader }) }}
+                      <a class="t-button-link" @click="goSystemConfig">{{ t('page.host.ip_scope_edit_global') }}</a>
+                      <div class="limit-mode-desc">{{ t('page.host.ip_scope_inherit_desc') }}</div>
+                    </div>
+                  </t-alert>
+                  <t-alert v-else theme="error">
+                    <div>
+                      {{ t('page.host.ip_scope_global_empty') }}
+                      <a class="t-button-link" @click="goSystemConfig">{{ t('page.host.ip_scope_goto_global') }}</a>
+                    </div>
+                  </t-alert>
+                </div>
+                <div v-else-if="formData.ip_source_mode !== 'nic'" class="ip-source-scope">
+                  <t-alert theme="success" :message="t('page.host.ip_scope_own')" />
+                </div>
+                <!-- 到底该配哪个头，只能看真实到达的请求头才知道；这里直接给个入口，免得跑去日志详情里翻(#956) -->
+                <div v-if="isEdit && formData.code" class="ip-probe-entry">
+                  <a class="t-button-link" @click="openIpProbe">{{ t('page.host.ip_probe_entry') }}</a>
+                </div>
+              </div>
             </t-form-item>
             <t-form-item
               v-if="formData.ip_mode === 'proxy' && formData.ip_source_mode === 'cdn_preset'"
@@ -590,6 +616,15 @@
       <ssl-form :value="sslformEditData" :is-edit="true" @close="editSSLFormVisible = !editSSLFormVisible" @submit="onSSLSubmitEdit" />
     </t-dialog>
   </div>
+    <!-- 真实IP来源诊断(与访问日志页共用同一组件) -->
+    <ip-source-probe-dialog
+      v-model:visible="ipProbeVisible"
+      :host-code="formData.code"
+      :host-name="formData.host"
+      :can-use-header="true"
+      @use-header="useProbeHeader"
+    />
+
 </template>
 
 <script setup lang="ts">
@@ -662,6 +697,7 @@ import { sslConfigListApi, sslConfigAddApi, sslConfigEditApi } from '@/apis/sslc
 import { getOrDefault } from '@/utils/usuallytool';
 import { get_detail_by_item_api, edit_system_config_by_item_api } from '@/apis/systemconfig';
 import { wafCDNProviderInfoApi } from '@/apis/cdnip';
+import IpSourceProbeDialog from './IpSourceProbeDialog.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -669,8 +705,10 @@ const props = withDefaults(
     isEdit?: boolean;
     selectCanFilter?: boolean;
     hostAddUrl?: string;
+    // 打开时定位到哪个配置 Tab（1基础内容 4其他配置），供外部深链使用
+    initTab?: number;
   }>(),
-  { isEdit: false, selectCanFilter: true, hostAddUrl: '' },
+  { isEdit: false, selectCanFilter: true, hostAddUrl: '', initTab: 0 },
 );
 const emit = defineEmits<{
   (e: 'close'): void;
@@ -688,6 +726,43 @@ const formData = ref<Record<string, any>>({
 
 // cdn_preset 模式下所选厂商中心库状态(只读展示)
 const cdnProviderInfo = ref<Record<string, any> | null>(null);
+
+// 真实IP来源诊断弹窗 + 全局「获取访客IP头信息」(兼容模式下本站实际沿用的值)
+const ipProbeVisible = ref(false);
+const globalProxyHeader = ref('');
+
+function openIpProbe() {
+  ipProbeVisible.value = true;
+}
+
+// 直接把看到的头填进"真实IP头名"，省得手打错
+function useProbeHeader(name: string) {
+  formData.value.ip_real_header = name;
+  if (!['header', 'cdn_preset'].includes(formData.value.ip_source_mode)) {
+    formData.value.ip_source_mode = 'header';
+  }
+  ipProbeVisible.value = false;
+  MessagePlugin.success(t('page.host.ip_probe_used_header'));
+}
+
+// 读全局「获取访客IP头信息」，用于兼容模式下回显"本站实际沿用的是什么"
+function loadGlobalProxyHeader() {
+  get_detail_by_item_api({ item: 'gwaf_proxy_header' })
+    .then((res) => {
+      if (res.code === 0 && res.data) {
+        globalProxyHeader.value = (res.data.value || '').trim();
+      }
+    })
+    .catch((e: Error) => {
+      console.log(e);
+    });
+}
+loadGlobalProxyHeader();
+
+function goSystemConfig() {
+  const route = router.resolve({ name: 'SystemConfig' });
+  window.open(route.href, '_blank');
+}
 
 // 真实IP来源：随所选模式返回对应解释文案(显示在下拉框下方)
 const ipSourceModeDesc = computed(() => {
@@ -791,7 +866,15 @@ const csrfConfigData = ref<Record<string, any>>({ ...INITIAL_CSRF, protect_metho
 const accessConfigData = ref<Record<string, any>>({ ...INITIAL_ACCESS });
 const tamperConfigData = ref<Record<string, any>>({ ...INITIAL_TAMPER });
 const uploadSecurityConfigData = ref<Record<string, any>>({ ...INITIAL_UPLOAD_SECURITY });
-const activeTab = ref<number>(1); // 当前激活的配置 Tab（受控，供防御总览开关「配置详情」跳转）
+const activeTab = ref<number>(1); // 当前激活的配置 Tab（受控，供防御总览开关「配置详情」跳转/外部深链）
+// 外部深链(如访问日志"IP提取有问题?"跳过来)指定要定位的 Tab
+watch(
+  () => props.initTab,
+  (val) => {
+    if (val > 0) activeTab.value = val;
+  },
+  { immediate: true },
+);
 
 // Tab 布局：left=竖向（默认），top=横向；用户偏好持久化到 localStorage
 const tabPlacement = ref<'left' | 'top'>(localStorage.getItem('samwaf_host_tab_placement') === 'top' ? 'top' : 'left');
@@ -1696,6 +1779,20 @@ getHttpsRedirectConfig();
 .host-tabs-wrapper--left :deep(.t-tabs__header)::-webkit-scrollbar-button,
 .host-tabs-wrapper--left :deep(.t-tabs__content)::-webkit-scrollbar-button {
   display: none;
+}
+
+.ip-source-block {
+  /* t-form-item 内容区是 flex 行，这里独占一整行并让内部元素纵向排布 */
+  flex: 1 1 100%;
+  min-width: 0;
+  width: 100%;
+}
+.ip-source-scope {
+  margin-top: 8px;
+  max-width: 620px;
+}
+.ip-probe-entry {
+  margin-top: 4px;
 }
 
 .host-form-ip-mode-help-icon {

@@ -359,6 +359,30 @@
 
     <!-- IP提取问题对话框 -->
     <t-dialog v-model:visible="ipExtractDialogVisible" :header="t('page.visit_log.detail.ip_extract_issue')" :width="800" :footer="false">
+      <!-- 这里改的是全局配置，站点里的「真实IP来源」会覆盖它；不写清楚用户会以为改了全局所有站点都变 -->
+      <t-alert theme="warning" style="margin-bottom: 16px">
+        <div>
+          <b>{{ t('page.visit_log.detail.ip_extract_scope_title') }}</b>
+          <div style="margin-top: 4px">{{ t('page.visit_log.detail.ip_extract_scope_desc') }}</div>
+          <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+            <t-select
+              v-model="ipExtractHostCode"
+              clearable
+              filterable
+              :style="{ width: '220px' }"
+              :placeholder="t('page.visit_log.detail.ip_extract_select_host')"
+            >
+              <t-option v-for="item in realHostOptions" :key="item.value" :value="item.value" :label="item.label">{{ item.label }}</t-option>
+            </t-select>
+            <t-button size="small" :disabled="!ipExtractHostCode" @click="gotoHostIpSource">
+              {{ t('page.visit_log.detail.ip_extract_goto_host') }}
+            </t-button>
+            <t-button size="small" variant="outline" :disabled="!ipExtractHostCode" @click="openHostProbe">
+              {{ t('page.visit_log.detail.ip_extract_view_headers') }}
+            </t-button>
+          </div>
+        </div>
+      </t-alert>
       <p>{{ t('page.visit_log.detail.ip_extract_issue_desc') }}</p>
 
       <!-- 视频教程链接 -->
@@ -427,6 +451,8 @@
         </t-form-item>
       </t-form>
     </t-dialog>
+    <!-- 某个站点单独看真实到达的请求头(与站点编辑页共用同一组件) -->
+    <ip-source-probe-dialog v-model:visible="hostProbeVisible" :host-code="ipExtractHostCode" :host-name="host_dic[ipExtractHostCode] || ''" />
   </div>
 </template>
 
@@ -442,6 +468,7 @@ import VisitDetailPage from './detail/index.vue';
 import { allsharedblist, attacklogVisitListApi, exportlog } from '@/apis/waflog/attacklog';
 import { aiLabelByUuidsApi, aiMarkLabelApi, aiUnmarkLabelApi } from '@/apis/ai';
 import { allhost } from '@/apis/host';
+import IpSourceProbeDialog from '@/pages/waf/host/components/IpSourceProbeDialog.vue';
 import { edit_system_config_api, get_detail_by_item_api } from '@/apis/systemconfig';
 import { get_ui_preference_api, save_ui_preference_api } from '@/apis/uipreference';
 import { ConvertStringToUnix, ConvertUnixToDate, NowDate } from '@/utils/date';
@@ -780,6 +807,23 @@ const filters = reactive({
 });
 
 const host_dic = reactive<Record<string, string>>({});
+// 「IP提取有问题?」里选站点用：只列真实站点("全局网站"不是站点，没有自己的真实IP来源配置)
+const realHostOptions = ref<Array<{ value: string; label: string }>>([]);
+const ipExtractHostCode = ref('');
+const hostProbeVisible = ref(false);
+
+// 跳到该站点的「真实IP来源」配置(网站防护列表页会自动打开编辑弹窗的"其他配置")
+function gotoHostIpSource() {
+  if (!ipExtractHostCode.value) return;
+  ipExtractDialogVisible.value = false;
+  router.push({ name: 'WafHost', query: { editcode: ipExtractHostCode.value, tab: 'ipsource' } });
+}
+
+// 就地查看该站点最近真实到达的请求头
+function openHostProbe() {
+  if (!ipExtractHostCode.value) return;
+  hostProbeVisible.value = true;
+}
 // 主机昵称字典 host_code -> 纯昵称
 const host_nickname_dic = reactive<Record<string, string>>({});
 const share_db_dic = reactive<Record<string, string>>({});
@@ -1193,10 +1237,15 @@ function loadHostList() {
       .then((res) => {
         if (res.code === 0) {
           const hostOptions = res.data;
+          const realHosts: Array<{ value: string; label: string }> = [];
           for (let i = 0; i < hostOptions.length; i++) {
             host_dic[hostOptions[i].value] = hostOptions[i].label;
             host_nickname_dic[hostOptions[i].value] = hostOptions[i].nickname || '';
+            if (hostOptions[i].global_host !== 1) {
+              realHosts.push({ value: hostOptions[i].value, label: hostOptions[i].label });
+            }
           }
+          realHostOptions.value = realHosts;
         }
         resolve();
       })
