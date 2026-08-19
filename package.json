@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
+    "sync:icons": "node build/sync-tdesign-icons.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

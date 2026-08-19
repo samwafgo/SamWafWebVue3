@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
+// @ts-expect-error 纯 JS 构建脚本，无类型声明
+import tdesignLocalIcons from './build/vite-plugin-tdesign-local-icons.mjs'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -9,7 +11,8 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
-  plugins: [vue()],
+  // 把 tdesign 图标 CDN 换成本地资源，保证内网/离线部署图标不空白
+  plugins: [vue(), tdesignLocalIcons({ root: __dirname })],
   server: {
     host: '::',
     port: 3002,
