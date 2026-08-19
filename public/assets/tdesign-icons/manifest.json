@@ -1,10 +1,10 @@
 {
   "note": "由 npm run sync:icons 生成，请勿手改",
-  "syncedAt": "2026-08-19T06:47:40.644Z",
+  "syncedAt": "2026-08-19T09:26:20.223Z",
   "files": [
     {
       "url": "https://tdesign.gtimg.com/icon/0.4.2/fonts/index.js",
-      "local": "tdesign-icons/0.4.2/index.js",
+      "local": "assets/tdesign-icons/0.4.2/index.js",
       "bytes": 977431
     }
   ]
