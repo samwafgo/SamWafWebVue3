@@ -79,12 +79,38 @@
     <!-- 升级对话框 -->
     <t-dialog v-model:visible="updateVisible" width="600px" :header="t('topNav.update.has_new_version')">
       <template #confirmBtn>
-        <t-button :theme="updateNewVer && updateNewVer.toLowerCase().includes('beta') ? 'danger' : 'warning'" @click="handleConfirmUpdate">
+        <!-- 容器环境：应用内升级会在容器重建后回退，这里不给"确认更新"，只给文档入口 -->
+        <t-link
+          v-if="!selfUpdateAllowed"
+          theme="primary"
+          underline
+          href="https://doc.samwaf.com/quickstart/Update.html"
+          target="_blank"
+          >{{ t('topNav.update.container_doc_link') }}</t-link
+        >
+        <t-button
+          v-else
+          :theme="updateNewVer && updateNewVer.toLowerCase().includes('beta') ? 'danger' : 'warning'"
+          @click="handleConfirmUpdate"
+        >
           {{ t('topNav.update.confirm_update') }}
         </t-button>
       </template>
 
-      <t-alert theme="warning">
+      <t-alert v-if="!selfUpdateAllowed" theme="error" :title="t('topNav.update.container_blocked_title')">
+        <template #message>
+          <div>{{ t('topNav.update.container_blocked_tips', { container: containerType || 'container' }) }}</div>
+          <div style="margin-top: 8px">
+            <strong>{{ t('topNav.update.container_howto_label') }}</strong>
+          </div>
+          <pre style="margin: 4px 0; padding: 8px; background: rgba(0, 0, 0, 0.05); border-radius: 4px; white-space: pre-wrap">
+docker compose pull
+docker compose up -d</pre
+          >
+          <div>{{ t('topNav.update.container_howto_tips') }}</div>
+        </template>
+      </t-alert>
+      <t-alert v-else theme="warning">
         <template #message>
           {{ t('topNav.update.update_danger_tips') }}
         </template>
@@ -196,6 +222,11 @@ const isUpdateloading = ref(false);
 const updateVisible = ref(false);
 const updateNewVer = ref('');
 const updateDesc = ref('');
+/** 运行环境：容器类型(空=非容器)与是否允许应用内升级。
+ * 容器里升级只对当前容器有效，容器重建就回退到镜像版本，而数据库回不去，
+ * 所以容器环境下后端会直接拒绝升级，前端这里换成镜像更新指引。 */
+const containerType = ref('');
+const selfUpdateAllowed = ref(true);
 /** 微信二维码对话框 */
 const wechatVisible = ref(false);
 /** 控制中心相关 */
@@ -313,6 +344,9 @@ function checkVersion(method: 'auto' | 'manual') {
         hasNewVersion.value = true;
         updateNewVer.value = res.data.version_new;
         updateDesc.value = res.data.version_desc;
+        containerType.value = res.data.container || '';
+        // 老后端没有这个字段时按"允许"处理，避免升级入口被误屏蔽
+        selfUpdateAllowed.value = res.data.self_update_allowed !== false;
         if (method === 'manual') {
           updateVisible.value = true;
         } else {
@@ -364,6 +398,11 @@ function handleConfirmUpdate() {
 }
 
 function handleDoUpdate() {
+  // 容器环境后端会直接拒绝，这里先拦一道，避免无谓请求和误导性的 loading
+  if (!selfUpdateAllowed.value) {
+    MessagePlugin.warning(t('topNav.update.container_blocked_title'));
+    return;
+  }
   isUpdateloading.value = true;
   // 检查是否为beta版本，如果是则添加渠道参数
   const params = updateNewVer.value && updateNewVer.value.toLowerCase().includes('beta') ? { channel: 'github' } : { channel: 'official' };
