@@ -64,6 +64,10 @@ import {
 } from 'tdesign-icons-vue-next';
 import { SysRuntimeInfoApi } from '@/apis/sysinfo';
 
+// 版本号里带 beta / test / alpha / rc 的是预发布版本，必须明确标成"测试版"，
+// 不能跟正式版一样标绿，否则用户分不清手上跑的是不是稳定版本。
+const PRERELEASE_RE = /(^|[^a-z])(beta|test|alpha|rc)([^a-z]|$)/i;
+
 const props = defineProps<{ visible: boolean }>();
 
 const emit = defineEmits<{
@@ -115,11 +119,16 @@ const infoRows = computed<InfoRow[]>(() => {
 
   const versionText = [data.version_name, data.version ? `(${data.version})` : ''].filter(Boolean).join(' ');
   if (versionText) {
+    const isDebug = data.version_release === 'false';
+    const isPrerelease = !isDebug && PRERELEASE_RE.test(versionText);
+    let tag = label('release_official');
+    if (isDebug) tag = label('release_debug');
+    else if (isPrerelease) tag = label('release_beta');
     rows.push({
       label: label('software_version'),
       value: versionText,
-      tag: data.version_release === 'false' ? label('release_debug') : label('release_official'),
-      tagTheme: data.version_release === 'false' ? 'warning' : 'success',
+      tag,
+      tagTheme: isDebug || isPrerelease ? 'warning' : 'success',
     });
   }
   if (data.os_name) {
