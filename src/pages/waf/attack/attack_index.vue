@@ -340,12 +340,14 @@ const ipTagDbSaving = ref(false);
 const attackIpVisible = ref(false); // 访问明细
 const trans_to_parent_ip = ref(''); // 传递给子组件
 const batchDeleteVisible = ref(false);
+// 批量删除用的是「含被排除标签」的完整清单，否则被排除的标签没入口清理历史数据
+const batchTagOptions = ref<{ label: string; value: string; count?: number }[]>([]);
 const batchDeleteTags = ref<string[]>([]);
 const batchDeleteMode = ref('tag_only');
 const batchDeleteLoading = ref(false);
 const batchDeleteProgress = ref(0);
 
-const attackTagsForBatch = computed(() => attackTags.value.filter((item) => item.value !== ''));
+const attackTagsForBatch = computed(() => batchTagOptions.value.filter((item) => item.value !== ''));
 
 // 大数字用万/亿，否则计数比规则名还长
 function formatCount(n: number) {
@@ -698,6 +700,10 @@ function handleBatchClearSelection() {
 }
 
 function handleBatchDeleteTag() {
+  // 每次打开都重新拉一次完整标签（含被排除的），保证清理入口不丢
+  allattacktaglist({ with_benign: 1 }).then((res) => {
+    batchTagOptions.value = Array.isArray(res.data) ? res.data : [];
+  });
   batchDeleteTags.value = [];
   batchDeleteMode.value = 'tag_only';
   batchDeleteProgress.value = 0;
