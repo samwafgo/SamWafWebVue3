@@ -246,12 +246,6 @@ const wafRoutes: RouteRecordRaw[] = [
         component: () => import('@/pages/waf/access_session/index.vue'),
         meta: { title: 'menu.access.session' },
       },
-      {
-        path: 'wafaccessaudit',
-        name: 'WafAccessAudit',
-        component: () => import('@/pages/waf/access_audit/index.vue'),
-        meta: { title: 'menu.access.audit' },
-      },
     ],
   },
   {
@@ -317,6 +311,12 @@ const wafRoutes: RouteRecordRaw[] = [
         name: 'SysLog',
         component: () => import('@/pages/waf/syslog/index.vue'),
         meta: { title: 'menu.system.system_log_title' },
+      },
+      {
+        path: 'wafaccessaudit',
+        name: 'WafAccessAudit',
+        component: () => import('@/pages/waf/access_audit/index.vue'),
+        meta: { title: 'menu.system.security_audit_title' },
       },
       {
         path: 'SystemConfig',

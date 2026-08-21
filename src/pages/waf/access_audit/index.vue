@@ -5,6 +5,16 @@
         <div class="left-operation-container"></div>
         <div class="right-operation-container">
           <t-form :data="searchformData" :label-width="70" layout="inline" colon :style="{ marginBottom: '8px' }">
+            <t-form-item :label="t('page.access.audit.label_category')" name="category">
+              <t-select
+                v-model="searchformData.category"
+                :style="{ width: '140px' }"
+                clearable
+                :placeholder="t('common.select_placeholder')"
+              >
+                <t-option v-for="c in categoryOptions" :key="c" :value="c" :label="categoryLabel(c)" />
+              </t-select>
+            </t-form-item>
             <t-form-item :label="t('page.access.audit.label_event')" name="event">
               <t-select
                 v-model="searchformData.event"
@@ -44,6 +54,11 @@
           :loading="dataLoading"
           @page-change="rehandlePageChange"
         >
+          <template #category="{ row }">
+            <t-tag :theme="row.category === 'config' ? 'warning' : 'default'" variant="light">{{
+              categoryLabel(row.category)
+            }}</t-tag>
+          </template>
           <template #event="{ row }">
             <t-tag :theme="eventTheme(row.event)" variant="light">{{ eventLabel(row.event) }}</t-tag>
           </template>
@@ -83,7 +98,11 @@ const EVENTS = [
   'denied',
   'bypass_ip',
   'bypass_token',
+  'config_ssl_export_write',
 ];
+
+// 审计分类，与后端 AuditCategory* 常量对应
+const CATEGORIES = ['access', 'config'];
 
 // 安全告警级事件用 danger 高亮：票据重放与回跳地址异常在正常流程里不该出现，
 // 一旦出现就意味着有人在主动构造请求。
@@ -96,8 +115,9 @@ const dataLoading = ref(false);
 const data = ref<Record<string, any>[]>([]);
 const rowKey = 'id';
 const eventOptions = EVENTS;
+const categoryOptions = CATEGORIES;
 const pagination = reactive({ total: 0, current: 1, pageSize: 10 });
-const searchformData = reactive({ event: '', account_name: '', client_ip: '', host: '' });
+const searchformData = reactive({ category: '', event: '', account_name: '', client_ip: '', host: '' });
 
 function eventLabel(e: string) {
   if (!e) return '-';
@@ -107,6 +127,13 @@ function eventLabel(e: string) {
   return label === key ? e : label;
 }
 
+function categoryLabel(c: string) {
+  if (!c) return '-';
+  const key = `page.access.audit.category_${c}`;
+  const label = t(key);
+  return label === key ? c : label;
+}
+
 function eventTheme(e: string) {
   if (DANGER_EVENTS.includes(e)) return 'danger';
   if (WARNING_EVENTS.includes(e)) return 'warning';
@@ -114,6 +141,7 @@ function eventTheme(e: string) {
 }
 
 const columns = computed<TableProps['columns']>(() => [
+  { title: t('page.access.audit.label_category'), width: 100, colKey: 'category' },
   { title: t('page.access.audit.label_event'), align: 'left', width: 140, colKey: 'event' },
   { title: t('page.access.audit.col_result'), width: 90, colKey: 'result' },
   { title: t('page.access.audit.label_account'), width: 130, ellipsis: true, colKey: 'account_name' },
