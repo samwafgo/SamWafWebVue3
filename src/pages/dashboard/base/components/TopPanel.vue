@@ -14,9 +14,29 @@
             <span class="stat-card__chip" :class="`stat-card__chip--${item.theme}`">
               <component :is="item.icon" class="stat-card__chip-icon" />
             </span>
-            <span class="stat-card__trend">
-              <span class="stat-card__trend-label">{{ t('dashboard.counter.compare') }}</span>
-              <trend type="up" describe="0%" :is-reverse-color="index === 0" />
+            <!-- QPS 卡片右上角放实时趋势图，其余卡片放"较昨日同期"环比 -->
+            <span v-if="item.spark" class="stat-card__spark" :title="qpsSparkTitle">
+              <svg class="stat-card__spark-svg" viewBox="0 0 96 32" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="qpsSparkFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop class="stat-card__spark-stop--top" offset="0%" />
+                    <stop class="stat-card__spark-stop--bottom" offset="100%" />
+                  </linearGradient>
+                </defs>
+                <path class="stat-card__spark-area" :d="qpsAreaPath" />
+                <polyline class="stat-card__spark-line" :points="qpsLinePoints" />
+              </svg>
+            </span>
+            <span v-else class="stat-card__trend" :title="compareTip(item)">
+              <span class="stat-card__trend-label">{{ t('dashboard.counter.compare_same_period') }}</span>
+              <trend
+                v-if="hasTrendArrow(item)"
+                :type="item.compare?.Trend || 'up'"
+                :describe="percentText(item.compare)"
+                :is-reverse-color="index === 0"
+                :is-neutral-color="!!item.neutralTrend"
+              />
+              <span v-else class="stat-card__trend-flat">{{ flatText(item) }}</span>
             </span>
           </div>
           <div class="stat-card__body">
@@ -40,12 +60,21 @@ import {
   ThunderIcon,
   ViewListIcon,
 } from 'tdesign-icons-vue-next';
-import { markRaw, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, markRaw, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
-import { wafstatsumdayapi } from '@/apis/stats';
+import { wafstatqpstrendapi, wafstatsumdayapi } from '@/apis/stats';
 import Trend from '@/components/trend/index.vue';
+
+// 后端 /wafstatsumday 返回的同期环比（今天 00:00~当前整点 vs 昨天同一时段）
+interface StatCompare {
+  HasCompare: boolean;
+  Current: number;
+  Previous: number;
+  Percent: number;
+  Trend: string;
+}
 
 interface PanelItem {
   title: string;
@@ -53,6 +82,9 @@ interface PanelItem {
   theme: string;
   icon: any;
   displayNumber: number;
+  compare?: StatCompare;
+  neutralTrend?: boolean;
+  spark?: boolean;
 }
 
 const { t } = useI18n();
@@ -61,15 +93,97 @@ const router = useRouter();
 const panelList = ref<PanelItem[]>([]);
 const animFrames: number[] = [];
 const animTimers: number[] = [];
+const compareHours = ref(0);
+const qpsPoints = ref<number[]>([]);
+const qpsMax = ref(0);
+let qpsTimer = 0;
 
 onMounted(() => {
   getWafStat();
+  loadQpsTrend();
+  qpsTimer = window.setInterval(loadQpsTrend, 5000);
 });
 
 onBeforeUnmount(() => {
   animFrames.forEach((id) => cancelAnimationFrame(id));
   animTimers.forEach((id) => clearTimeout(id));
+  if (qpsTimer) clearInterval(qpsTimer);
 });
+
+// 采样点不足两个时补成一条水平线，避免图上什么都画不出来
+const sparkCoords = computed(() => {
+  const values = qpsPoints.value.length >= 2 ? qpsPoints.value : [0, 0];
+  const w = 96;
+  const h = 32;
+  const pad = 3;
+  const max = Math.max(...values, 1);
+  const step = values.length > 1 ? (w - pad * 2) / (values.length - 1) : 0;
+  return values.map((v, i) => ({
+    x: pad + i * step,
+    y: h - pad - (Math.max(Number(v) || 0, 0) / max) * (h - pad * 2),
+  }));
+});
+
+const qpsLinePoints = computed(() =>
+  sparkCoords.value.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' '),
+);
+
+const qpsAreaPath = computed(() => {
+  const coords = sparkCoords.value;
+  if (!coords.length) return '';
+  const bottom = 29; // 32 - pad
+  const head = coords
+    .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.y.toFixed(2)}`)
+    .join(' ');
+  return `${head} L${coords[coords.length - 1].x.toFixed(2)},${bottom} L${coords[0].x.toFixed(2)},${bottom} Z`;
+});
+
+const qpsSparkTitle = computed(() => {
+  const trend = t('dashboard.counter.qps_trend', { seconds: qpsPoints.value.length });
+  const peak = t('dashboard.counter.qps_trend_peak', { max: qpsMax.value });
+  return `${trend} · ${peak}`;
+});
+
+function hasTrendArrow(item: PanelItem) {
+  return !!(item.compare && item.compare.HasCompare && item.compare.Trend !== 'flat');
+}
+
+function percentText(compare?: StatCompare) {
+  return `${Math.abs(Number(compare?.Percent) || 0)}%`;
+}
+
+function flatText(item: PanelItem) {
+  return item.compare && item.compare.HasCompare ? '0%' : '\u2014';
+}
+
+function compareTip(item: PanelItem) {
+  if (!item.compare || !item.compare.HasCompare) {
+    return t('dashboard.counter.compare_none_tip');
+  }
+  return t('dashboard.counter.compare_tip', {
+    hour: String(compareHours.value).padStart(2, '0'),
+    current: item.compare.Current,
+    previous: item.compare.Previous,
+  });
+}
+
+function loadQpsTrend() {
+  if (typeof document !== 'undefined' && document.hidden) return;
+  wafstatqpstrendapi({ limit: 60 })
+    .then((res) => {
+      if (res.code !== 0 || !res.data) return;
+      qpsPoints.value = (res.data.Points || []).map((p: any) => Number(p.V) || 0);
+      qpsMax.value = Number(res.data.Max) || 0;
+      const card = panelList.value.find((p) => p.spark);
+      if (card) {
+        card.number = Number(res.data.Current) || 0;
+        card.displayNumber = card.number;
+      }
+    })
+    .catch((e: Error) => {
+      console.log(e);
+    });
+}
 
 function jumpLog(index: number) {
   // 三张卡片都必须带上显式 query：空 query 与"从菜单点进去"无法区分，
@@ -100,26 +214,32 @@ function getWafStat() {
             number: d.AttackCountOfToday,
             theme: 'danger',
             icon: markRaw(ShieldErrorIcon),
+            compare: d.AttackCompare,
           },
           {
             title: t('dashboard.counter.all_visit_count'),
             number: d.VisitCountOfToday,
             theme: 'primary',
             icon: markRaw(ViewListIcon),
+            compare: d.VisitCompare,
+            neutralTrend: true, // 访问量涨跌无好坏之分，不用红绿
           },
           {
             title: t('dashboard.counter.not_normal_visit_count'),
             number: d.IllegalIpCountOfToday,
             theme: 'warning',
             icon: markRaw(RadarIcon),
+            compare: d.IllegalIpCompare,
           },
           {
             title: t('dashboard.counter.qps'),
             number: d.CurrentQps,
             theme: 'success',
             icon: markRaw(ThunderIcon),
+            spark: true,
           },
         ];
+        compareHours.value = d.CompareHours || 0;
         panelList.value = panels.map((p) => ({ ...p, displayNumber: 0 }));
         animateAll();
       }
@@ -257,6 +377,44 @@ function formatNumber(val: number | string) {
   color: var(--td-text-color-placeholder);
 }
 
+.stat-card__trend-flat {
+  font-size: 12px;
+  color: var(--td-text-color-placeholder);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-card__spark {
+  display: inline-flex;
+  align-items: center;
+}
+
+.stat-card__spark-svg {
+  width: 96px;
+  height: 32px;
+}
+
+.stat-card__spark-stop--top {
+  stop-color: var(--td-success-color);
+  stop-opacity: 0.32;
+}
+
+.stat-card__spark-stop--bottom {
+  stop-color: var(--td-success-color);
+  stop-opacity: 0;
+}
+
+.stat-card__spark-area {
+  fill: url(#qpsSparkFill);
+}
+
+.stat-card__spark-line {
+  fill: none;
+  stroke: var(--td-success-color);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .stat-card__number {
   display: inline-block;
   font-size: 30px;
@@ -297,6 +455,7 @@ function formatNumber(val: number | string) {
 }
 
 .stat-card--primary .stat-card__trend-label,
+.stat-card--primary .stat-card__trend-flat,
 .stat-card--primary .stat-card__number,
 .stat-card--primary .stat-card__title {
   color: var(--td-text-color-anti);

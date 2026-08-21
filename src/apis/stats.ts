@@ -9,6 +9,15 @@ export function wafstatsumdayapi(params?: Record<string, any>) {
   });
 }
 
+/** 查询实时QPS趋势(内存采样) */
+export function wafstatqpstrendapi(params?: Record<string, any>) {
+  return request({
+    url: 'wafstatqpstrend',
+    method: 'get',
+    params,
+  });
+}
+
 /** 查询周期区间的攻击和正常信息 */
 export function wafstatsumdayrangeapi(params: Record<string, any>) {
   return request({
