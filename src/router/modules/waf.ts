@@ -405,18 +405,6 @@ const wafRoutes: RouteRecordRaw[] = [
     ],
   },
   {
-    path: 'center',
-    meta: { title: 'menu.pc.parent_title', icon: markRaw(ServerIcon) },
-    children: [
-      {
-        path: 'CenterManager',
-        name: 'CenterManager',
-        component: () => import('@/pages/waf/center/index.vue'),
-        meta: { title: 'menu.pc.pc_list_title' },
-      },
-    ],
-  },
-  {
     path: 'oplatform',
     meta: { title: 'menu.oplatform.parent_title', icon: markRaw(CloudIcon) },
     children: [

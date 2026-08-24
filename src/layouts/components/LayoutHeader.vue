@@ -63,11 +63,6 @@
       </t-button>
     </t-dropdown>
 
-    <!-- 控制中心：当前管理的服务器 -->
-    <t-button v-if="hasClientServer" theme="warning" @click="router.push('/center/CenterManager')">
-      {{ t('topNav.current_server') }} {{ currentServer.client_server_name }}
-    </t-button>
-
     <!-- 用户菜单 -->
     <t-dropdown :options="userOptions" trigger="click" @click="onUserAction">
       <t-button variant="text" class="header-user-btn">
@@ -229,9 +224,6 @@ const containerType = ref('');
 const selfUpdateAllowed = ref(true);
 /** 微信二维码对话框 */
 const wechatVisible = ref(false);
-/** 控制中心相关 */
-const hasClientServer = ref(false);
-const currentServer = ref<Record<string, any>>({});
 /** 版本回退 */
 const rollbackVisible = ref(false);
 const rollbackLoading = ref(false);
@@ -269,14 +261,6 @@ const compiledMarkdown = computed(() => DOMPurify.sanitize(marked.parse(updateDe
 onMounted(() => {
   // 首次提示，每隔24小时进行弹窗，其余实际不弹窗
   checkVersion('auto');
-  // 管控初始化
-  const currentServerStr = localStorage.getItem('current_server');
-  if (currentServerStr) {
-    hasClientServer.value = true;
-    currentServer.value = JSON.parse(currentServerStr);
-  } else {
-    hasClientServer.value = false;
-  }
 });
 
 function onLangChange(data: { value?: string | number }) {
