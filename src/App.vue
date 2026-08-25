@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import websocket from '@/utils/websocket';
 import bus from '@/utils/bus';
-import { AesDecrypt } from '@/utils/crypto';
+import { ensureSecSession, currentKeyId, decryptIncoming } from '@/utils/seccrypto';
 import { clearLocalStorageExceptPreserved, saveCurrentUrl } from '@/constants';
 import { useStatsStore } from '@/store/modules/stats';
 import { useNotificationStore } from '@/store/modules/notification';
@@ -47,14 +47,19 @@ function getSecurityPath(): string {
   }
 }
 
-function initWebSocket() {
+async function initWebSocket() {
   if (ws) return;
+  // WebSocket 建连不能带自定义头，会话密钥只能走查询参数；
+  // 握手失败(旧后端/网络异常)时 keyid 为空，后端推送回落 legacy 通道。
+  await ensureSecSession();
+  const keyid = currentKeyId();
   const isHttps = window.location.protocol === 'https:';
   const secPath = getSecurityPath();
-  const url =
+  let url =
     env === 'development'
       ? `ws://127.0.0.1:26666${secPath}/api/v1/ws`
       : `${isHttps ? 'wss' : 'ws'}://${window.location.host}${secPath}/api/v1/ws`;
+  if (keyid) url += `?keyid=${encodeURIComponent(keyid)}`;
   // 代次：本次连接的身份标记。旧连接的事件迟到时靠它识别并丢弃，
   // 否则「已废弃连接的 close 事件」会把 ws（此时已指向新的活连接）置空并再排一次重连，
   // 于是又漏出一条连接——线上就是这样一路裂变出十几条并存连接，
@@ -127,7 +132,7 @@ function wsOnMessage(e: MessageEvent, gen: number) {
   }
   const wsData = JSON.parse(e.data);
   if (wsData.msg_code === '200') {
-    const tmpSrcContent = AesDecrypt(wsData.msg_data);
+    const tmpSrcContent = decryptIncoming(wsData.msg_data);
     const msgData = JSON.parse(tmpSrcContent);
     wsData.msg_data = msgData;
     if (wsData.msg_cmd_type === 'RELOAD_PAGE') {

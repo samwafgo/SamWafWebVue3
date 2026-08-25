@@ -362,7 +362,7 @@ import { MessagePlugin, LoadingPlugin, type TableProps, type PageInfo } from 'td
 import { LinkIcon } from 'tdesign-icons-vue-next';
 import { v4 as uuidv4 } from 'uuid';
 
-import { AesDecrypt } from '@/utils/crypto';
+import { decryptIncoming } from '@/utils/seccrypto';
 import { getOnlineUrl } from '@/utils/usuallytool';
 import { API_HOST } from '@/config/host';
 import { SSL_STATUS } from '@/constants';
@@ -926,7 +926,7 @@ function beforeUpload() {
 }
 
 function onUploadSuccess(context: any) {
-  const respData = JSON.parse(AesDecrypt(context.response.data));
+  const respData = JSON.parse(decryptIncoming(context.response.data));
   let lastMsg = `成功数量 :${respData.SuccessInt}`;
   if (respData.FailInt > 0) {
     lastMsg += `失败数量 :${respData.FailInt} 错误原因:${respData.Msg}`;

@@ -1,6 +1,6 @@
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { v4 as uuidv4 } from 'uuid';
-import { AesDecrypt, AesEncrypt } from './crypto';
+import { ensureSecSession, currentKeyId, encryptOutgoing, decryptIncoming } from './seccrypto';
 import { API_HOST } from '@/config/host';
 
 interface ChatMessage {
@@ -20,7 +20,10 @@ interface FetchChatStreamOptions {
 }
 
 /** AI 助手流式对话（请求体 AES 加密，响应内容 AES 解密） */
-export function fetchChatStream({ history, q: _q, scene, ctrl, onSuccess, onError, onComplete }: FetchChatStreamOptions) {
+export async function fetchChatStream({ history, q: _q, scene, ctrl, onSuccess, onError, onComplete }: FetchChatStreamOptions) {
+  // 这条流不走 axios，会话密钥得自己确保就绪；握手失败则回落 legacy 通道
+  await ensureSecSession();
+  const keyId = currentKeyId();
   const requestData = {
     history: history
       .filter((item) => item.role && item.content)
@@ -28,7 +31,7 @@ export function fetchChatStream({ history, q: _q, scene, ctrl, onSuccess, onErro
       .map((item) => [item.role, item.content]),
     scene: scene || 'general',
   };
-  const encryptedData = AesEncrypt(JSON.stringify(requestData));
+  const encryptedData = encryptOutgoing(JSON.stringify(requestData));
 
   fetchEventSource(`${API_HOST}/gpt/chat`, {
     method: 'POST',
@@ -40,6 +43,8 @@ export function fetchChatStream({ history, q: _q, scene, ctrl, onSuccess, onErro
       // 这条请求不走 axios，防重放头得自己加，否则被 ReplayProtect 直接拦掉
       'X-Request-Time': Math.floor(Date.now() / 1000).toString(),
       'X-Request-Id': uuidv4(),
+      // 声明会话密钥，后端据此加密流里的每一条 content
+      ...(keyId ? { 'X-Sec-Ver': '2', 'X-Key-Id': keyId } : {}),
     },
     body: encryptedData,
     signal: ctrl.signal,
@@ -74,7 +79,7 @@ export function fetchChatStream({ history, q: _q, scene, ctrl, onSuccess, onErro
       try {
         const res = JSON.parse(msg.data);
         if (typeof res.content === 'string') {
-          res.content = AesDecrypt(res.content);
+          res.content = decryptIncoming(res.content);
         }
         // [DONE] 是结束标记，不要当成正文塞进气泡
         if (res.content === '[DONE]') {
