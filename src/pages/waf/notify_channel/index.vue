@@ -279,7 +279,20 @@
             <t-input v-model="formEditData.webhook_url" :style="{ width: '480px' }"></t-input>
           </t-form-item>
           <t-form-item v-if="formEditData.type !== 'wechatwork'" :label="t('page.notify_channel.label_secret')" name="secret">
-            <t-input v-model="formEditData.secret" :style="{ width: '480px' }" type="password" autocomplete="new-password"></t-input>
+            <t-input
+              v-model="formEditData.secret"
+              :style="{ width: '480px' }"
+              type="password"
+              autocomplete="new-password"
+              :placeholder="
+                formEditData.has_secret
+                  ? t('page.notify_channel.secret_set_placeholder')
+                  : t('page.notify_channel.secret_placeholder')
+              "
+            ></t-input>
+            <div v-if="formEditData.has_secret" class="notify-secret-tip">
+              {{ t('page.notify_channel.secret_keep_tip') }}
+            </div>
           </t-form-item>
           <t-alert v-if="formEditData.type === 'wechatwork'" theme="info" style="margin-top: 12px">
             <div style="line-height: 1.8">
@@ -302,8 +315,17 @@
             <t-input
               v-model="formEditData.access_token"
               :style="{ width: '480px' }"
-              :placeholder="t('page.notify_channel.serverchan_sendkey_placeholder')"
+              type="password"
+              autocomplete="new-password"
+              :placeholder="
+                formEditData.has_access_token
+                  ? t('page.notify_channel.secret_set_placeholder')
+                  : t('page.notify_channel.serverchan_sendkey_placeholder')
+              "
             ></t-input>
+            <div v-if="formEditData.has_access_token" class="notify-secret-tip">
+              {{ t('page.notify_channel.secret_keep_tip') }}
+            </div>
           </t-form-item>
 
           <t-alert theme="warning" style="margin-top: 12px">
@@ -481,6 +503,9 @@ const INITIAL_DATA = {
   webhook_url: '',
   secret: '',
   access_token: '',
+  // 后端脱敏后回传的"是否已配置"标记（列表已带），用于编辑时提示与占位符
+  has_secret: false,
+  has_access_token: false,
   config_json: '',
   status: 1,
   remarks: '',
@@ -615,6 +640,10 @@ function handleClickEdit(e: { row: Record<string, any> }) {
       console.error('解析邮件配置失败', err);
     }
   }
+  // 密钥字段后端已不回显（列表只带 has_secret / has_access_token），
+  // 这里再显式清一次，确保输入框永远从空开始：留空提交=保持原值。
+  row.secret = '';
+  row.access_token = '';
   formEditData.value = row;
   editFormVisible.value = true;
 }
@@ -638,6 +667,9 @@ async function handleTest(e: { row: Record<string, any> }) {
   }
 }
 
+// 只改启用状态：整行回传即可。行里的 secret/access_token 是后端脱敏后的空串，
+// 按"留空=保持原值"语义不会动到已存密钥（这里不能走 normalizeSecretsForEdit，
+// 那是编辑表单换类型时才需要的显式清空）。
 async function handleStatusChange(row: Record<string, any>) {
   try {
     const res = await editNotifyChannel(row);
@@ -650,6 +682,29 @@ async function handleStatusChange(row: Record<string, any>) {
   } catch (error) {
     row.status = row.status === 1 ? 0 : 1;
     MessagePlugin.error(t('common.tips.save_failed'));
+  }
+}
+
+// 与后端 waf_service.ConfigClearSentinel 约定：编辑时密钥字段留空=保持原值
+// （后端不回显原文，空提交不能当成清空），要真正清空必须提交这个哨兵值。
+const SECRET_CLEAR_SENTINEL = '__SAMWAF_CLEAR__';
+
+// 各渠道类型真正会用到的密钥字段：
+//   secret       —— 钉钉/飞书的签名密钥（企业微信不需要）
+//   access_token —— Server酱的 SendKey
+const TYPES_USING_SECRET = ['dingtalk', 'feishu'];
+const TYPES_USING_ACCESS_TOKEN = ['serverchan'];
+
+// normalizeSecretsForEdit 仅用于【编辑】提交（就地修改 submitData）：
+// 本类型使用的密钥字段留空即可（后端理解为"保持原值"）；用不到的字段发哨兵值真正清空，
+// 否则换过渠道类型后旧密钥会一直滞留在库里。
+// 新增走的是另一条路：那时没有"原值"，空串就是空串，不能发哨兵。
+function normalizeSecretsForEdit(submitData: Record<string, any>) {
+  if (!TYPES_USING_SECRET.includes(submitData.type)) {
+    submitData.secret = SECRET_CLEAR_SENTINEL;
+  }
+  if (!TYPES_USING_ACCESS_TOKEN.includes(submitData.type)) {
+    submitData.access_token = SECRET_CLEAR_SENTINEL;
   }
 }
 
@@ -709,7 +764,10 @@ const onSubmit: FormProps['onSubmit'] = async ({ validateResult, firstError }) =
 const onSubmitEdit: FormProps['onSubmit'] = async ({ validateResult, firstError }) => {
   if (validateResult === true) {
     try {
-      const res = await editNotifyChannel(normalizeSubmitData(formEditData.value));
+      const submitData = normalizeSubmitData(formEditData.value);
+      // 编辑专用：本类型用不到的密钥必须显式清空（空串在后端表示保持原值）
+      normalizeSecretsForEdit(submitData);
+      const res = await editNotifyChannel(submitData);
       if (res.code === 0) {
         MessagePlugin.success(t('page.notify_channel.edit_success'));
         editFormVisible.value = false;
@@ -822,5 +880,15 @@ function handleEditTypeChange(value: any) {
 
 .skip-verify-checkbox :deep(.t-checkbox__label) {
   line-height: 1.4;
+}
+</style>
+
+<style>
+/* 弹窗内容由 TDesign 挂到 body 下，scoped 样式命中不到，这里用全局作用域 */
+.notify-secret-tip {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--td-text-color-placeholder);
+  line-height: 1.5;
 }
 </style>

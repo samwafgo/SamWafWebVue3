@@ -49,7 +49,16 @@
                 </div>
               </div>
               <div v-if="row.remarks" class="config-item-key" :title="row.item">{{ row.item }}</div>
-              <div class="config-item-value">{{ row.value }}</div>
+              <!-- 密钥类配置后端不回显原文，只按 has_value 显示是否已配置 -->
+              <div v-if="row.is_sensitive" class="config-item-value">
+                <t-tag v-if="row.has_value" theme="success" variant="light" size="small">
+                  {{ t('page.systemconfig.secret_configured') }}
+                </t-tag>
+                <t-tag v-else theme="default" variant="light" size="small">
+                  {{ t('page.systemconfig.secret_empty') }}
+                </t-tag>
+              </div>
+              <div v-else class="config-item-value">{{ row.value }}</div>
             </div>
           </div>
         </div>
@@ -62,7 +71,37 @@
           <t-input v-model="formEditData.item" :style="{ width: '480px' }" readonly></t-input>
         </t-form-item>
         <t-form-item :label="t('page.systemconfig.label_configuration_value')" name="value">
-          <t-textarea v-model="formEditData.value" :style="{ width: '480px' }" :autosize="{ minRows: 1, maxRows: 12 }"></t-textarea>
+          <!-- 密钥类：不回显原文，密码框输入新值；留空=保持原值；清空需显式点按钮 -->
+          <div v-if="formEditData.is_sensitive" :style="{ width: '480px' }">
+            <t-input
+              v-model="formEditData.value"
+              type="password"
+              autocomplete="new-password"
+              :disabled="secretCleared"
+              :placeholder="
+                secretCleared
+                  ? t('page.systemconfig.secret_will_clear')
+                  : formEditData.has_value
+                    ? t('page.systemconfig.secret_set_placeholder')
+                    : t('page.systemconfig.secret_empty_placeholder')
+              "
+            ></t-input>
+            <div class="config-secret-ops">
+              <span class="config-secret-tip">{{ t('page.systemconfig.secret_tip') }}</span>
+              <a v-if="formEditData.has_value && !secretCleared" class="t-button-link" @click="onClickClearSecret">
+                {{ t('page.systemconfig.secret_clear') }}
+              </a>
+              <a v-if="secretCleared" class="t-button-link" @click="onClickCancelClearSecret">
+                {{ t('page.systemconfig.secret_cancel_clear') }}
+              </a>
+            </div>
+          </div>
+          <t-textarea
+            v-else
+            v-model="formEditData.value"
+            :style="{ width: '480px' }"
+            :autosize="{ minRows: 1, maxRows: 12 }"
+          ></t-textarea>
         </t-form-item>
         <t-form-item :label="t('common.remarks')" name="remarks">
           <t-textarea v-model="formEditData.remarks" :style="{ width: '480px' }" name="remarks"> </t-textarea>
@@ -87,6 +126,10 @@ import { edit_system_config_api, get_detail_by_id_api, system_config_list_api } 
 
 const { t, te } = useI18n();
 
+// 与后端 waf_service.ConfigClearSentinel 约定：密钥类配置留空=保持原值，
+// 需要清空必须显式提交这个哨兵值。
+const SECRET_CLEAR_SENTINEL = '__SAMWAF_CLEAR__';
+
 const INITIAL_DATA = {
   item_class: 'system',
   item: '',
@@ -94,10 +137,13 @@ const INITIAL_DATA = {
   item_type: 'string',
   options: '',
   remarks: '',
+  is_sensitive: false,
+  has_value: false,
 };
 
 const editFormVisible = ref(false);
 const formEditData = ref<Record<string, any>>({ ...INITIAL_DATA });
+const secretCleared = ref(false); // 密钥类配置：本次编辑是否点了"清空"
 const rules: FormProps['rules'] = {};
 
 const dataLoading = ref(false);
@@ -178,13 +224,30 @@ function getList() {
 }
 
 function handleClickEdit(row: Record<string, any>) {
+  secretCleared.value = false;
   editFormVisible.value = true;
   getDetail(row.id);
 }
 
+// 清空密钥：留空只表示"保持原值"，真要清空得显式提交哨兵值
+function onClickClearSecret() {
+  secretCleared.value = true;
+  formEditData.value.value = '';
+}
+
+function onClickCancelClearSecret() {
+  secretCleared.value = false;
+  formEditData.value.value = '';
+}
+
 const onSubmitEdit: FormProps['onSubmit'] = ({ firstError }) => {
   if (!firstError) {
-    edit_system_config_api({ ...formEditData.value })
+    const postdata = { ...formEditData.value };
+    // 密钥类三态：点了"清空"发哨兵值；留空=后端保持原值；填了新值=更新
+    if (postdata.is_sensitive && secretCleared.value) {
+      postdata.value = SECRET_CLEAR_SENTINEL;
+    }
+    edit_system_config_api(postdata)
       .then((res) => {
         if (res.code === 0) {
           MessagePlugin.success(res.msg);
@@ -204,6 +267,7 @@ const onSubmitEdit: FormProps['onSubmit'] = ({ firstError }) => {
 
 function onClickCloseEditBtn() {
   editFormVisible.value = false;
+  secretCleared.value = false;
   formEditData.value = { ...INITIAL_DATA };
 }
 
@@ -212,6 +276,11 @@ function getDetail(id: string | number) {
     .then((res) => {
       if (res.code === 0) {
         formEditData.value = { ...res.data };
+        // 密钥类：后端返回的 value 已是空串，这里再显式清一次，
+        // 确保输入框永远从空开始（避免任何残留被当成新值提交）
+        if (formEditData.value.is_sensitive) {
+          formEditData.value.value = '';
+        }
       }
     })
     .catch((e: Error) => {
@@ -343,5 +412,22 @@ function getDetail(id: string | number) {
   word-break: break-all;
   max-height: 200px;
   overflow: auto;
+}
+</style>
+
+<style>
+/* 弹窗内容由 TDesign 挂到 body 下，scoped 样式命中不到，这里用全局作用域 */
+.config-secret-ops {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.config-secret-tip {
+  flex: 1;
+  font-size: 12px;
+  color: var(--td-text-color-placeholder);
+  line-height: 1.5;
 }
 </style>
