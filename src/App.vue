@@ -32,6 +32,8 @@ const WS_RECONNECT_MAX_DELAY = 10000;
 const WS_STABLE_THRESHOLD = 30000;
 
 let ws: WebSocket | null = null;
+// 握手是异步的，期间 ws 还是 null；没有这个标志，两次调用会双双穿过判断各建一条连接
+let wsConnecting = false;
 let disConnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectDelay = WS_RECONNECT_BASE_DELAY;
 let wsOpenedAt = 0;
@@ -48,10 +50,16 @@ function getSecurityPath(): string {
 }
 
 async function initWebSocket() {
+  if (ws || wsConnecting) return;
+  wsConnecting = true;
+  try {
+    // WebSocket 建连不能带自定义头，会话密钥只能走查询参数；
+    // 握手失败(旧后端/网络异常)时 keyid 为空，后端推送回落 legacy 通道。
+    await ensureSecSession();
+  } finally {
+    wsConnecting = false;
+  }
   if (ws) return;
-  // WebSocket 建连不能带自定义头，会话密钥只能走查询参数；
-  // 握手失败(旧后端/网络异常)时 keyid 为空，后端推送回落 legacy 通道。
-  await ensureSecSession();
   const keyid = currentKeyId();
   const isHttps = window.location.protocol === 'https:';
   const secPath = getSecurityPath();
