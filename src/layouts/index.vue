@@ -1,5 +1,7 @@
 <template>
   <t-layout class="app-layout">
+    <!-- HTTP 访问提示条：置于布局最外层，PC 与移动端都能看到 -->
+    <insecure-banner />
     <!-- PC：固定侧边栏（可折叠） -->
     <t-aside v-if="!settingStore.isMobile" :width="asideWidth" class="app-aside">
       <side-nav :collapsed="settingStore.isSidebarCompact" />
@@ -45,6 +47,7 @@ import { useI18n } from 'vue-i18n';
 import { NotifyPlugin, Button as TButton } from 'tdesign-vue-next';
 import { useSettingStore } from '@/store/modules/setting';
 import SideNav from './components/SideNav.vue';
+import InsecureBanner from './components/InsecureBanner.vue';
 import LayoutHeader from './components/LayoutHeader.vue';
 import Breadcrumb from './components/Breadcrumb.vue';
 import AiAssistant from './components/AiAssistant.vue';
