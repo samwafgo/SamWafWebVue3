@@ -800,11 +800,24 @@ import {
 import { sslConfigDetailApi, sslConfigListApi } from '@/apis/sslconfig';
 import { wafCDNProviderInfoApi } from '@/apis/cdnip';
 import { get_detail_by_item_api, edit_system_config_by_item_api } from '@/apis/systemconfig';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { isLoopbackHost } from '@/utils/insecure';
+
+// 外部入口（如顶部 HTTP 提示条）用 ?section=xxx 指定落地后停在哪一节。
+// URL 里走短名而不是锚点 id：短名是对外契约，id 是本页实现，改 id 不该牵动调用方
+const SECTION_BY_KEY: Record<string, string> = {
+  ip: 'vp-sec-ip',
+  proxy: 'vp-sec-proxy',
+  cors: 'vp-sec-cors',
+  domain: 'vp-sec-domain',
+  access: 'vp-sec-access',
+  entry: 'vp-sec-entry',
+  notice: 'vp-sec-notice',
+};
 
 const { t } = useI18n();
 const router = useRouter();
+const route = useRoute();
 
 // 传输加密状态：按当前访问方式判定，与后端配置无关——
 // 用户可能配了证书却仍从 http 端口进来，这里要如实反映"这一次访问"是不是加密的
@@ -2127,7 +2140,7 @@ function updateActiveSection() {
   activeSection.value = current;
 }
 
-function jumpTo(id: string) {
+function jumpTo(id: string, behavior: ScrollBehavior = 'smooth') {
   const el = document.getElementById(id);
   if (!el) return;
   activeSection.value = id;
@@ -2137,8 +2150,34 @@ function jumpTo(id: string) {
     spyLock = false;
     updateActiveSection();
   }, 600);
-  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  el.scrollIntoView({ behavior, block: 'start' });
 }
+
+let sectionSettleTimer: ReturnType<typeof setTimeout> | undefined;
+// 外部入口带 ?section=xxx 进来时，落地直接停在那一节。参数读完即清，
+// 这样已经停在本页时再点一次顶部提示条，路由仍会变化、依旧能接住
+function consumeRouteSection() {
+  const key = route.query?.section;
+  if (!key) return;
+  const query = { ...route.query };
+  delete query.section;
+  router.replace({ path: route.path, query }).catch(() => {});
+
+  const id = SECTION_BY_KEY[String(key)];
+  if (!id) return;
+  nextTick(() => {
+    // 是"直接落到位"不是"从头滚过去"，这里不要平滑动画
+    jumpTo(id, 'auto');
+    // 各节内容是异步拉的，撑开后目标会往下走，落定再校一次位置。
+    // 期间用户自己点了别的锚点（高亮变了）就不抢他的滚动条
+    clearTimeout(sectionSettleTimer);
+    sectionSettleTimer = setTimeout(() => {
+      if (activeSection.value === id) jumpTo(id, 'auto');
+    }, 500);
+  });
+}
+
+watch(() => route.query.section, consumeRouteSection);
 
 // 证书节是条件渲染的：关掉 SSL 后它连同锚点一起消失，
 // 当时若正停在这一节，高亮要落回一个还存在的节，否则顶栏的"当前"会空着
@@ -2160,6 +2199,8 @@ onMounted(() => {
   (spyScroller || window).addEventListener('scroll', spyHandler, { passive: true });
   window.addEventListener('resize', spyHandler, { passive: true });
   nextTick(updateActiveSection);
+  // 放在滚动容器就位之后：锚点让位高度依赖它测出来的 stickyTop
+  consumeRouteSection();
 });
 
 onUnmounted(() => {
@@ -2169,6 +2210,7 @@ onUnmounted(() => {
   }
   if (spyRaf) window.cancelAnimationFrame(spyRaf);
   clearTimeout(spyTimer);
+  clearTimeout(sectionSettleTimer);
 });
 </script>
 
