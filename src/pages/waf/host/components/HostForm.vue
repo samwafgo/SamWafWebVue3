@@ -209,6 +209,16 @@
               <t-input v-model="formData.nickname" :style="{ width: '480px' }" :placeholder="t('page.host.nickname_placeholder')" />
             </t-form-item>
 
+            <t-form-item :label="t('page.host.group.belong_group')" name="group_code">
+              <t-select v-model="formData.group_code" :style="{ width: '480px' }" clearable :placeholder="t('page.host.group.belong_group_placeholder')">
+                <t-option v-for="g in props.hostGroups" :key="g.group_code" :value="g.group_code" :label="g.group_name">
+                  <i class="hg-form-dot" :style="{ background: g.color }"></i>{{ g.group_name }}
+                </t-option>
+              </t-select>
+              <a class="hg-form-new" @click="openGroupQuickAdd()">＋ {{ t('page.host.group.new_group') }}</a>
+              <div class="hg-form-tip">{{ t('page.host.group.belong_group_tip') }}</div>
+            </t-form-item>
+
             <t-form-item :label="t('common.remarks')" name="remarks">
               <t-textarea v-model="formData.remarks" :style="{ width: '480px' }" :placeholder="t('common.placeholder_content')" name="remarks" />
             </t-form-item>
@@ -625,6 +635,33 @@
       @use-header="useProbeHeader"
     />
 
+    <!-- 就地新建分组：省得先跳去列表页建好再回来 -->
+    <t-dialog
+      v-model:visible="groupQuickAddVisible"
+      :header="t('page.host.group.new_group')"
+      :width="440"
+      :confirm-btn="t('common.confirm')"
+      :cancel-btn="t('common.cancel')"
+      @confirm="saveGroupQuickAdd"
+    >
+      <t-form :label-width="90" colon>
+        <t-form-item :label="t('page.host.group.name')">
+          <t-input v-model="groupQuickAdd.group_name" :maxlength="50" :placeholder="t('page.host.group.name_placeholder')" />
+        </t-form-item>
+        <t-form-item :label="t('page.host.group.color')">
+          <div class="hg-form-colors">
+            <i
+              v-for="c in groupColorOptions"
+              :key="c"
+              :class="{ on: groupQuickAdd.color === c }"
+              :style="{ background: c }"
+              @click="groupQuickAdd.color = c"
+            ></i>
+          </div>
+        </t-form-item>
+      </t-form>
+    </t-dialog>
+
 </template>
 
 <script setup lang="ts">
@@ -697,6 +734,7 @@ import { sslConfigListApi, sslConfigAddApi, sslConfigEditApi } from '@/apis/sslc
 import { getOrDefault } from '@/utils/usuallytool';
 import { get_detail_by_item_api, edit_system_config_by_item_api } from '@/apis/systemconfig';
 import { wafCDNProviderInfoApi } from '@/apis/cdnip';
+import { addHostGroup } from '@/apis/hostgroup';
 import IpSourceProbeDialog from './IpSourceProbeDialog.vue';
 
 const props = withDefaults(
@@ -705,18 +743,56 @@ const props = withDefaults(
     isEdit?: boolean;
     selectCanFilter?: boolean;
     hostAddUrl?: string;
+    // 所属分组下拉数据，由父页面统一维护并下发。
+    // 走 prop 而不是本组件自己拉：弹窗只创建一次，自己拉的话分组条上新建的分组要刷新页面才看得到。
+    hostGroups?: Record<string, any>[];
     // 打开时定位到哪个配置 Tab（1基础内容 4其他配置），供外部深链使用
     initTab?: number;
   }>(),
-  { isEdit: false, selectCanFilter: true, hostAddUrl: '', initTab: 0 },
+  { isEdit: false, selectCanFilter: true, hostAddUrl: '', initTab: 0, hostGroups: () => [] },
 );
 const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'submit', payload: { result: Record<string, any> }): void;
   (e: 'tab-placement-change', placement: string): void;
+  (e: 'group-changed'): void;
 }>();
 
 const { t } = useI18n();
+
+// 就地新建分组（颜色与后端白名单一致）
+const groupColorOptions = ['#0052D9', '#2BA471', '#E37318', '#D54941', '#834EC2', '#0594FA', '#8B8B8B', '#D4A017'];
+const groupQuickAddVisible = ref(false);
+const groupQuickAdd = ref<Record<string, any>>({ group_name: '', color: '#0052D9' });
+
+function openGroupQuickAdd() {
+  groupQuickAdd.value = { group_name: '', color: groupColorOptions[0] };
+  groupQuickAddVisible.value = true;
+}
+
+function saveGroupQuickAdd() {
+  const name = (groupQuickAdd.value.group_name || '').trim();
+  if (!name) {
+    MessagePlugin.warning(t('page.host.group.name_required'));
+    return;
+  }
+  addHostGroup({ group_name: name, color: groupQuickAdd.value.color, remarks: '' })
+    .then((res: any) => {
+      if (res.code === 0) {
+        groupQuickAddVisible.value = false;
+        // 让父页面重新拉一次分组（分组条与本下拉共用同一份数据），再回填到当前表单
+        emit('group-changed');
+        if (res.data && res.data.group_code) {
+          formData.value.group_code = res.data.group_code;
+        }
+      } else {
+        MessagePlugin.error(res.msg || t('common.failed'));
+      }
+    })
+    .catch((e: Error) => {
+      console.log(e);
+    });
+}
 const router = useRouter();
 
 const formData = ref<Record<string, any>>({
@@ -1740,6 +1816,48 @@ getHttpsRedirectConfig();
 </script>
 
 <style scoped>
+.hg-form-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.hg-form-new {
+  margin-left: 10px;
+  font-size: 12px;
+  color: var(--td-brand-color);
+  cursor: pointer;
+}
+
+.hg-form-tip {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--td-text-color-placeholder);
+}
+
+.hg-form-colors {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  height: 32px;
+}
+
+.hg-form-colors i {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  display: inline-block;
+}
+
+.hg-form-colors i.on {
+  border-color: var(--td-text-color-primary);
+}
+
 /* 切换 Tab 布局按钮独占一行、右对齐，避免遮挡标签或内容 */
 .tab-placement-bar {
   display: flex;
