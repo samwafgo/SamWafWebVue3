@@ -97,17 +97,20 @@ const compareHours = ref(0);
 const qpsPoints = ref<number[]>([]);
 const qpsMax = ref(0);
 let qpsTimer = 0;
+let qpsFailCount = 0;
+// 组件销毁时可能还有请求在飞，它的 finally 会再排一个 timer，clearTimeout 拦不住
+let qpsStopped = false;
 
 onMounted(() => {
   getWafStat();
   loadQpsTrend();
-  qpsTimer = window.setInterval(loadQpsTrend, 5000);
 });
 
 onBeforeUnmount(() => {
   animFrames.forEach((id) => cancelAnimationFrame(id));
   animTimers.forEach((id) => clearTimeout(id));
-  if (qpsTimer) clearInterval(qpsTimer);
+  qpsStopped = true;
+  if (qpsTimer) clearTimeout(qpsTimer);
 });
 
 // 采样点不足两个时补成一条水平线，避免图上什么都画不出来
@@ -167,10 +170,29 @@ function compareTip(item: PanelItem) {
   });
 }
 
+// 连续失败后指数退避：5s → 10s → 30s → 60s 封顶，成功后立刻回到 5s。
+// 后端不可用时固定 5 秒轮询会持续制造失败，是「提示铺满右侧」的放大器。
+function nextQpsDelay() {
+  if (qpsFailCount < 3) return 5000;
+  if (qpsFailCount === 3) return 10000;
+  if (qpsFailCount === 4) return 30000;
+  return 60000;
+}
+
+function scheduleQpsPoll(delay: number) {
+  if (qpsStopped) return;
+  if (qpsTimer) clearTimeout(qpsTimer);
+  qpsTimer = window.setTimeout(() => loadQpsTrend(), delay);
+}
+
 function loadQpsTrend() {
-  if (typeof document !== 'undefined' && document.hidden) return;
-  wafstatqpstrendapi({ limit: 60 })
+  if (typeof document !== 'undefined' && document.hidden) {
+    scheduleQpsPoll(5000);
+    return;
+  }
+  wafstatqpstrendapi({ limit: 60 }, { background: true })
     .then((res) => {
+      qpsFailCount = 0;
       if (res.code !== 0 || !res.data) return;
       qpsPoints.value = (res.data.Points || []).map((p: any) => Number(p.V) || 0);
       qpsMax.value = Number(res.data.Max) || 0;
@@ -181,7 +203,11 @@ function loadQpsTrend() {
       }
     })
     .catch((e: Error) => {
+      qpsFailCount += 1;
       console.log(e);
+    })
+    .finally(() => {
+      scheduleQpsPoll(nextQpsDelay());
     });
 }
 

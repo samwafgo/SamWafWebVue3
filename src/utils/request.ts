@@ -15,11 +15,50 @@ import { clearLocalStorageExceptPreserved, saveCurrentUrl } from '@/constants';
 import { getRequestTimeout, DEFAULT_REQUEST_TIMEOUT } from '@/config/requestTimeout';
 import { h } from 'vue';
 import { NotifyPlugin, DialogPlugin, MessagePlugin, Button as TButton } from 'tdesign-vue-next';
+import { pushLocalNotice, resetLocalNoticeOnLogout } from '@/utils/localnotice';
+
+// 扩展 axios 配置：请求失败要不要弹提示由这两个标记（连同请求方法）决定，
+// 见 SamWafTechDoc/开发规则规范/2026-08-28-前端全局提示与铃铛消息.md
+declare module 'axios' {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+  interface AxiosRequestConfig {
+    /** 强制当作后台请求：失败只进小铃铛，不弹通知 */
+    background?: boolean;
+    /** 强制当作前台请求：失败照常弹通知（GET 默认不弹时用它覆盖） */
+    foreground?: boolean;
+  }
+}
 
 // 连接失败(网络/跨域)提示：每次页面加载最多提示一次，避免刷屏
 let netErrNotified = false;
-// 请求超时提示的节流时间戳：并发超时时 3 秒内只提示一次，避免刷屏
+
+// 页面自动发起的请求（轮询、进页面就跑的检查）失败时不弹通知，只进小铃铛：
+// 无外网环境下这类请求会持续失败，弹出来就是一条条把右侧堆满。
+// 用户亲手点出来的请求仍然弹，但改为自动消失并按同一窗口节流。
+// 详见 SamWafTechDoc/开发规则规范/2026-08-28-前端全局提示与铃铛消息.md
+const TIMEOUT_NOTIFY_DURATION = 10000;
+// 「无法连接后端」信息量更大（带解决办法入口），给长一点，但同样会自己消失
+const NETERR_NOTIFY_DURATION = 15000;
+// 连续超时的计数窗口：超过这个间隔没再超时就重新从 1 数起
+const TIMEOUT_COUNT_WINDOW = 60000;
 let lastTimeoutNotifyAt = 0;
+let lastTimeoutAt = 0;
+let timeoutCount = 0;
+
+// 判断一个失败要不要弹出来打扰用户。
+//
+// 全站有几百个请求，靠逐个打 background 标记必然漏（页面 mounted 里的列表加载最典型），
+// 所以改成按语义给默认值：
+//   GET / HEAD  —— 读取展示类，失败了页面自己会是空状态，弹卡片只会糊屏 → 只进铃铛
+//   POST 等写操作 —— 用户提交了东西，必须让他知道没成功 → 弹
+// 需要反过来的地方用 background / foreground 显式覆盖。
+function isBackgroundRequest(cfg: any): boolean {
+  if (!cfg) return true;
+  if (cfg.background === true) return true;
+  if (cfg.foreground === true) return false;
+  const method = String(cfg.method || 'get').toLowerCase();
+  return method === 'get' || method === 'head';
+}
 
 // 弹出"解决办法"详情对话框（内容较长，用对话框保证完整可读，不被通知截断）
 function showNetErrDetail(origin: string) {
@@ -168,6 +207,10 @@ instance.interceptors.response.use(
       // 保存当前页面以便重新登录后回跳，并清理登录态（保留语言等白名单项）
       saveCurrentUrl();
       clearLocalStorageExceptPreserved();
+      // 并发请求会一起返回「令牌过期」，人已经被踢回登录页，这些回声没有信息量：
+      // 清掉已投递的本地提示，并在短窗口内丢弃后到的同类（见 messageguard）。
+      // 但「为什么被踢出来」要留一条，由登录页在表单上方显示一次。
+      resetLocalNoticeOnLogout('auth');
       router.replace({ path: '/login' });
     } else if (data.code === CODE.NEED_BIND_2FA) {
       router.replace({ path: '/account/otp' });
@@ -175,6 +218,7 @@ instance.interceptors.response.use(
       // 服务端强制改密门：令牌未改密即访问其他接口时触发，引导回登录重新进入强制改密流程
       saveCurrentUrl();
       clearLocalStorageExceptPreserved();
+      resetLocalNoticeOnLogout();
       router.replace({ path: '/login' });
     }
     return data as any;
@@ -188,13 +232,26 @@ instance.interceptors.response.use(
     if (isTimeout) {
       try {
         const seconds = Math.round((((err.config && err.config.timeout) || DEFAULT_REQUEST_TIMEOUT)) / 1000);
+        const cfg = err.config;
+        // 无论前台后台都在铃铛里留一条，用户手滑关掉通知后仍能回看
+        pushLocalNotice(`请求超时：${(cfg && cfg.url) || ''}（${seconds} 秒未响应）`);
+        // 后台请求到此为止，不弹通知
+        if (isBackgroundRequest(cfg)) {
+          return Promise.reject(err);
+        }
         const now = Date.now();
-        if (now - lastTimeoutNotifyAt > 3000) {
-          lastTimeoutNotifyAt = now;
-          const cfg = err.config;
+        timeoutCount = now - lastTimeoutAt > TIMEOUT_COUNT_WINDOW ? 1 : timeoutCount + 1;
+        lastTimeoutAt = now;
+        // 上一条通知还在屏幕上就不再弹，避免连点/并发请求堆成一列
+        if (now - lastTimeoutNotifyAt < TIMEOUT_NOTIFY_DURATION) {
+          return Promise.reject(err);
+        }
+        lastTimeoutNotifyAt = now;
+        const repeatTip = timeoutCount > 1 ? `（近期第 ${timeoutCount} 次）` : '';
+        {
           NotifyPlugin.warning({
             title: '请求超时',
-            content: `请求已超过 ${seconds} 秒未响应，后端可能繁忙或网络较慢，请重试。`,
+            content: `请求已超过 ${seconds} 秒未响应，后端可能繁忙或网络较慢，请重试。${repeatTip}`,
             footer: () => {
               const hasEmergency = !!getEmergencyPath();
               return h(
@@ -226,7 +283,7 @@ instance.interceptors.response.use(
                 ],
               );
             },
-            duration: 0,
+            duration: TIMEOUT_NOTIFY_DURATION,
             closeBtn: true,
           });
         }
@@ -237,6 +294,10 @@ instance.interceptors.response.use(
     // 故非回环来源无响应大概率是 CORS 被拦。超时已在上方 return，不会走到这里。
     if (err.code === 'ERR_NETWORK' || !err.response || err.response.status === 0) {
       try {
+        pushLocalNotice(`无法连接后端：${(err.config && err.config.url) || ''}`);
+        if (isBackgroundRequest(err.config)) {
+          return Promise.reject(err);
+        }
         if (!netErrNotified) {
           netErrNotified = true;
           const origin = window.location.origin || '';
@@ -254,7 +315,7 @@ instance.interceptors.response.use(
                 },
                 () => '查看解决办法',
               ),
-            duration: 0,
+            duration: NETERR_NOTIFY_DURATION,
             closeBtn: true,
           });
         }

@@ -13,8 +13,12 @@ import pinia from './store';
 import i18n from './i18n';
 import './permission';
 import { setupDialogOverlayGuard } from './utils/dialogOverlayGuard';
+import { setupMessageGuard } from './utils/messageguard';
 
 setupDialogOverlayGuard();
+// 全局提示去重 + 跳登录后抑制回声，见
+// SamWafTechDoc/开发规则规范/2026-08-28-前端全局提示与铃铛消息.md
+setupMessageGuard();
 
 createApp(App)
   .use(TDesign)

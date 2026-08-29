@@ -2,6 +2,9 @@
   <div class="login-wrapper">
     <div class="login-container">
       <h1 class="login-title">{{ t('login.login_sub_title') }}</h1>
+      <!-- 登录失败的原因就摆在表单上方（视线必经之路），不再飘到右上角去。
+           同一时刻只留一条，新的覆盖旧的 -->
+      <t-alert v-if="loginError" theme="error" :message="loginError" class="login-error-tip" close @close="loginError = ''" />
       <t-form
         :data="formData"
         :rules="rules"
@@ -76,6 +79,7 @@ import { useUserStore } from '@/store/modules/user';
 import { CODE } from '@/utils/request';
 import { getSafeRedirectUrl } from '@/constants';
 import { getOnlineUrl } from '@/utils/usuallytool';
+import { takeLogoutReason } from '@/utils/localnotice';
 import ChangePasswordDialog from '@/pages/waf/account/components/ChangePasswordDialog.vue';
 
 const { t } = useI18n();
@@ -88,6 +92,13 @@ const showPsw = ref(false);
 const showSecretCode = ref(false);
 const showChangePwd = ref(false);
 const changePwdReason = ref('');
+const loginError = ref('');
+
+// 被踢回登录页时告诉用户一次「为什么」——右上角那一串回声已被抑制，
+// 但「登录状态已失效」这条本身是有信息量的，摆在表单上方说一次
+if (takeLogoutReason() === 'auth') {
+  loginError.value = t('login.session_expired');
+}
 
 const formData = reactive({
   account: '',
@@ -103,6 +114,7 @@ const rules: FormProps['rules'] = {
 const onSubmit: FormProps['onSubmit'] = async ({ validateResult }) => {
   if (validateResult !== true) return;
   loading.value = true;
+  loginError.value = '';
   try {
     const res = await userStore.login({
       login_account: formData.account,
@@ -123,12 +135,13 @@ const onSubmit: FormProps['onSubmit'] = async ({ validateResult }) => {
       // 该账号开启了 2FA，显示安全码输入框让用户补填
       showSecretCode.value = true;
       formData.secretCode = '';
-      MessagePlugin.error(res.msg);
+      loginError.value = res.msg;
     } else {
-      MessagePlugin.error(res.msg || 'Login failed');
+      loginError.value = res.msg || 'Login failed';
     }
   } catch (e: any) {
-    MessagePlugin.error(e?.message || 'Network error');
+    // 连不上后端 / 超时：登录页没有铃铛可收，直接摆在表单上方
+    loginError.value = t('login.login_request_failed');
   } finally {
     loading.value = false;
   }
@@ -185,5 +198,9 @@ function handleJumpOnlineUrl() {
   margin-left: 8px;
   margin-right: 0;
   font-size: 12px;
+}
+
+.login-error-tip {
+  margin-bottom: 16px;
 }
 </style>

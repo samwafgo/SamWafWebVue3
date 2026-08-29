@@ -10,11 +10,13 @@ export function wafstatsumdayapi(params?: Record<string, any>) {
 }
 
 /** 查询实时QPS趋势(内存采样) */
-export function wafstatqpstrendapi(params?: Record<string, any>) {
+// opts 可传 { background: true }：页面自动发起的请求，超时只进小铃铛不弹通知
+export function wafstatqpstrendapi(params?: Record<string, any>, opts?: Record<string, any>) {
   return request({
     url: 'wafstatqpstrend',
     method: 'get',
     params,
+    ...(opts || {}),
   });
 }
 

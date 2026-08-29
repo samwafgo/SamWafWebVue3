@@ -32,6 +32,8 @@ export function loginapi(params: LoginParams) {
     url: 'public/login',
     method: 'post',
     data: params,
+    // 登录页自己在表单上方有内联提示条，右上角再弹一张「无法连接后端」就重复了
+    background: true,
   });
 }
 

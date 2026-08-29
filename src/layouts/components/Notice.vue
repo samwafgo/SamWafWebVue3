@@ -4,14 +4,33 @@
       <div class="header-msg">
         <div class="header-msg-top">
           <p>{{ t('page.notice.notice_title') }}</p>
-          <t-button v-if="unreadMsg.length > 0" class="clear-btn" variant="text" theme="primary" @click="setRead('all')">{{
+          <t-button v-if="currentList.length > 0" class="clear-btn" variant="text" theme="primary" @click="clearCurrentTab">{{
             t('page.notice.clear')
           }}</t-button>
         </div>
-        <t-list v-if="unreadMsg.length > 0" class="narrow-scrollbar" :split="true">
-          <t-list-item v-for="(item, index) in unreadMsg" :key="index">
+
+        <!-- 防护告警与系统消息性质完全不同：一个是外面来的攻击，一个是软件自己的事。
+             混在一列里，攻击一多就会把连接异常冲走 -->
+        <div class="msg-tabs">
+          <div :class="['msg-tab', { active: activeTab === 'guard' }]" @click="pickedTab = 'guard'">
+            <span>{{ t('page.notice.tab_guard') }}</span>
+            <span v-if="guardMsg.length" :class="['tab-count', { mute: activeTab !== 'guard' }]">{{ guardMsg.length }}</span>
+          </div>
+          <div :class="['msg-tab', { active: activeTab === 'system' }]" @click="pickedTab = 'system'">
+            <span>{{ t('page.notice.tab_system') }}</span>
+            <span v-if="systemMsg.length" :class="['tab-count', { mute: activeTab !== 'system' }]">{{ systemMsg.length }}</span>
+          </div>
+        </div>
+
+        <t-list v-if="currentList.length > 0" class="narrow-scrollbar" :split="true">
+          <t-list-item v-for="(item, index) in currentList" :key="item.message_id || index">
             <div>
-              <p class="msg-content">{{ item.message_data }}</p>
+              <p class="msg-content">
+                <span v-if="item.message_local" class="msg-tag net">{{ t('page.notice.kind_net') }}</span>
+                <span v-else-if="activeTab === 'system'" class="msg-tag ops">{{ t('page.notice.kind_ops') }}</span>
+                {{ item.message_data }}
+                <span v-if="(item.message_count || 1) > 1" class="msg-count">{{ item.message_count }}</span>
+              </p>
               <p class="msg-type">{{ item.message_type }}</p>
             </div>
             <p class="msg-time">{{ item.message_datetime }}</p>
@@ -27,7 +46,15 @@
       </div>
     </template>
     <t-badge :count="unreadMsg.length" :offset="[15, 21]">
-      <t-button theme="default" shape="square" variant="text" @click="isNoticeVisible = true">
+      <!-- 顶栏不放独立的连接状态灯：有连接异常时让铃铛本身变色，不额外占位置 -->
+      <t-button
+        :class="['notice-bell', { 'has-net-error': netUnreadCount > 0 }]"
+        theme="default"
+        shape="square"
+        variant="text"
+        :title="bellTitle"
+        @click="isNoticeVisible = true"
+      >
         <notification-icon />
       </t-button>
     </t-badge>
@@ -46,7 +73,27 @@ const { t } = useI18n();
 const notificationStore = useNotificationStore();
 
 const isNoticeVisible = ref(false);
+// 为空表示「跟随默认规则」，用户手点过之后才固定下来
+const pickedTab = ref('');
+
 const unreadMsg = computed(() => notificationStore.unreadMsg);
+const guardMsg = computed(() => notificationStore.guardMsg);
+const systemMsg = computed(() => notificationStore.systemMsg);
+const netUnreadCount = computed(() => notificationStore.netUnreadCount);
+
+// 连不上后端的时候，用户点开铃铛最想知道的就是这件事，不该让他再点一下页签
+const activeTab = computed(() => {
+  if (pickedTab.value) return pickedTab.value;
+  return netUnreadCount.value > 0 ? 'system' : 'guard';
+});
+
+const currentList = computed(() => (activeTab.value === 'guard' ? guardMsg.value : systemMsg.value));
+
+const bellTitle = computed(() =>
+  netUnreadCount.value > 0
+    ? t('page.notice.net_error_tip', { count: netUnreadCount.value })
+    : t('page.notice.notice_title'),
+);
 
 function onPopupVisibleChange(visible: boolean, context: any) {
   if (context?.trigger === 'trigger-element-click') {
@@ -54,6 +101,14 @@ function onPopupVisibleChange(visible: boolean, context: any) {
     return;
   }
   isNoticeVisible.value = visible;
+  // 关掉面板就把选择交回默认规则，下次打开仍能自动落到有异常的那一侧
+  if (!visible) pickedTab.value = '';
+}
+
+// 只清当前页签：防护告警是安全记录、系统消息是状态回声，
+// 一个按钮把两类一起抹掉，用户不敢点
+function clearCurrentTab() {
+  notificationStore.markCategoryRead(activeTab.value);
 }
 
 function setRead(type: 'all' | 'radio', item?: NotificationMsg) {
@@ -67,10 +122,11 @@ function setRead(type: 'all' | 'radio', item?: NotificationMsg) {
   height: 500px;
 }
 
+/* 56 顶部 + 38 页签栏 */
 .header-msg .empty-list {
-  height: calc(100% - 104px);
+  height: calc(100% - 94px);
   text-align: center;
-  padding-top: 200px;
+  padding-top: 180px;
   font-size: 14px;
   color: var(--td-text-color-secondary);
 }
@@ -92,7 +148,7 @@ function setRead(type: 'all' | 'radio', item?: NotificationMsg) {
 }
 
 .header-msg .t-list {
-  height: calc(100% - 56px);
+  height: calc(100% - 94px);
 }
 
 .header-msg :deep(.t-list-item) {
@@ -123,5 +179,86 @@ function setRead(type: 'all' | 'radio', item?: NotificationMsg) {
   right: 24px;
   bottom: 16px;
   color: var(--td-text-color-secondary);
+}
+
+/* ---- 分类页签 ---- */
+.msg-tabs {
+  display: flex;
+  padding: 0 16px;
+  height: 38px;
+  border-bottom: 1px solid var(--td-component-border);
+}
+
+.msg-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 12px;
+  font-size: 14px;
+  color: var(--td-text-color-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.msg-tab.active {
+  color: var(--td-brand-color);
+  font-weight: 600;
+  border-bottom-color: var(--td-brand-color);
+}
+
+.tab-count {
+  background: var(--td-error-color);
+  color: #fff;
+  font-size: 10px;
+  line-height: 15px;
+  min-width: 15px;
+  text-align: center;
+  border-radius: 8px;
+  padding: 0 4px;
+}
+
+.tab-count.mute {
+  background: var(--td-text-color-placeholder);
+}
+
+/* 「连接 / 运维」小标签：同在系统页签里，来源不同 */
+.msg-tag {
+  display: inline-block;
+  font-size: 11px;
+  line-height: 16px;
+  border-radius: 2px;
+  padding: 0 5px;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+
+.msg-tag.net {
+  background: var(--td-warning-color-light);
+  color: var(--td-warning-color-7);
+}
+
+.msg-tag.ops {
+  background: var(--td-success-color-light);
+  color: var(--td-success-color-7);
+}
+
+/* 同一条消息重复出现的次数 */
+.msg-count {
+  display: inline-block;
+  background: var(--td-error-color);
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  border-radius: 9px;
+  padding: 0 6px;
+  margin-left: 6px;
+  font-weight: 600;
+}
+
+/* 有未读连接异常时整颗铃铛套一层浅红底，替代原本设想的顶栏状态灯 */
+.notice-bell.has-net-error {
+  background: var(--td-error-color-light);
+  color: var(--td-error-color);
 }
 </style>
