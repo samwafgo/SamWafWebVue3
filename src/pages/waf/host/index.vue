@@ -9,6 +9,7 @@
           <t-button variant="base" theme="warning" @click="handleModifyAllGuardStatus()">{{ t('page.host.modify_all_guard_status') }}</t-button>
           <t-button variant="base" theme="primary" @click="handleBatchCopyConfig()">{{ t('page.host.batch_copy_config') }}</t-button>
           <t-button variant="base" theme="success" @click="handleImportNginx()">{{ t('page.host.import_nginx') }}</t-button>
+          <t-button variant="base" theme="default" @click="handlePortOverview()">{{ t('page.host.port_listen.overview_title') }}</t-button>
         </div>
         <div class="right-operation-container">
           <t-form :data="searchformData" :label-width="80" colon layout="inline" :style="{ marginBottom: '8px' }">
@@ -126,11 +127,29 @@
           </template>
           <template #port="{ row }">
             <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 3px">
-              <span style="font-weight: 500; min-width: 36px">{{ row.port }}</span>
-              <template v-if="row.bind_more_port && row.bind_more_port.trim()">
-                <t-tag v-for="(p, i) in splitPorts(row.bind_more_port)" :key="i" theme="primary" variant="light" size="small" :title="p">
-                  {{ p }}
+              <!-- 有 resolved_listens 时按「端口·协议」展示（含冲突红标，issue #955），否则退回老展示 -->
+              <template v-if="Array.isArray(row.resolved_listens) && row.resolved_listens.length > 0">
+                <t-tag
+                  v-for="(l, i) in row.resolved_listens.filter((x: any) => !x.implied)"
+                  :key="'rl' + i"
+                  :theme="row.port_conflict ? 'danger' : l.proto === 'https' ? 'success' : 'primary'"
+                  variant="light"
+                  size="small"
+                  :title="`${l.port} · ${l.proto.toUpperCase()}${l.ipv && l.ipv !== 'both' ? ` · ${l.ipv}` : ''}`"
+                >
+                  {{ l.port }}·{{ l.proto === 'https' ? 'HTTPS' : 'HTTP' }}
                 </t-tag>
+                <t-tooltip v-if="row.port_conflict" :content="t('page.host.port_listen.conflict_tip')" placement="top">
+                  <t-tag theme="danger" size="small">{{ t('page.host.port_listen.conflict') }}</t-tag>
+                </t-tooltip>
+              </template>
+              <template v-else>
+                <span style="font-weight: 500; min-width: 36px">{{ row.port }}</span>
+                <template v-if="row.bind_more_port && row.bind_more_port.trim()">
+                  <t-tag v-for="(p, i) in splitPorts(row.bind_more_port)" :key="i" theme="primary" variant="light" size="small" :title="p">
+                    {{ p }}
+                  </t-tag>
+                </template>
               </template>
             </div>
           </template>
@@ -276,8 +295,69 @@
       </t-radio-group>
     </t-dialog>
 
+    <!-- 端口占用总览（issue #955）：端口是全机共享资源，一个端口只能有一种协议 -->
+    <t-dialog
+      v-model:visible="portOverviewVisible"
+      :header="t('page.host.port_listen.overview_title')"
+      :width="900"
+      :footer="false"
+      attach="body"
+    >
+      <div style="margin-bottom: 12px; color: var(--td-text-color-secondary); font-size: 13px">
+        {{ t('page.host.port_listen.overview_desc') }}
+      </div>
+      <t-loading :loading="portOverviewLoading" show-overlay>
+        <t-table
+          row-key="port"
+          :data="portOverviewRows"
+          :columns="portOverviewColumns"
+          size="small"
+          max-height="480"
+          :row-class-name="portOverviewRowClass"
+        >
+          <template #port="{ row }">
+            <b>{{ row.port }}</b>
+          </template>
+          <template #active="{ row }">
+            <t-tag v-if="!row.online" theme="warning" variant="light" size="small">
+              {{ t('page.host.port_listen.status_offline') }}
+            </t-tag>
+            <t-tag v-else :theme="row.conflict ? 'danger' : row.active_proto === 'https' ? 'success' : 'primary'" variant="light" size="small">
+              {{ (row.active_proto || '').toUpperCase()
+              }}<template v-if="row.active_ipv && row.active_ipv !== 'both'"> · {{ row.active_ipv }}</template>
+            </t-tag>
+          </template>
+          <template #sites="{ row }">
+            <div style="display: flex; flex-wrap: wrap; gap: 4px">
+              <t-tag
+                v-for="(s, si) in row.sites"
+                :key="si"
+                variant="light"
+                size="small"
+                :theme="row.conflict ? 'danger' : 'default'"
+                :title="s.host + (s.nickname ? `（${s.nickname}）` : '')"
+              >
+                {{ s.host }} · {{ s.proto.toUpperCase()
+                }}<template v-if="s.is_main"> · {{ t('page.host.port_listen.main_suffix') }}</template
+                ><template v-if="s.implied"> · {{ t('page.host.port_listen.implied_suffix') }}</template>
+              </t-tag>
+            </div>
+          </template>
+          <template #status="{ row }">
+            <t-tag v-if="row.conflict" theme="danger" size="small">{{ t('page.host.port_listen.status_conflict') }}</t-tag>
+            <t-tag v-else theme="success" variant="light" size="small">{{ t('page.host.port_listen.status_ok') }}</t-tag>
+          </template>
+        </t-table>
+      </t-loading>
+    </t-dialog>
+
     <!-- New WebSite Dialog -->
-    <t-dialog v-model:visible="addFormVisible" :width="hostFormDialogWidth" :footer="false">
+    <t-dialog
+      v-model:visible="addFormVisible"
+      :width="hostFormEffectiveWidth"
+      :footer="false"
+      :class="{ 'host-form-dialog-fullscreen': hostFormFullscreen }"
+    >
       <template #header>
         {{ t('common.new') }}
         <t-link theme="primary" :href="hostAddUrl" target="_blank">
@@ -293,11 +373,17 @@
         @close="onClickCloseBtn"
         @submit="onSubmit"
         @tab-placement-change="onHostTabPlacementChange"
+        @fullscreen-change="onHostFullscreenChange"
       />
     </t-dialog>
 
     <!-- Edit WebSite Dialog -->
-    <t-dialog v-model:visible="editFormVisible" :width="hostFormDialogWidth" :footer="false">
+    <t-dialog
+      v-model:visible="editFormVisible"
+      :width="hostFormEffectiveWidth"
+      :footer="false"
+      :class="{ 'host-form-dialog-fullscreen': hostFormFullscreen }"
+    >
       <template #header>
         {{ t('common.edit') }}
         <span v-if="editHostLabel" class="dialog-header-host">{{ editHostLabel }}</span>
@@ -312,6 +398,7 @@
         @close="onClickCloseEditBtn"
         @submit="onSubmitEdit"
         @tab-placement-change="onHostTabPlacementChange"
+        @fullscreen-change="onHostFullscreenChange"
       />
     </t-dialog>
 
@@ -516,6 +603,7 @@ import {
   editHost,
   modifyAllGuardStatus,
   batchCopyConfig,
+  getPortOverview,
 } from '@/apis/host';
 
 import SslOrderList from '@/pages/waf/sslorder/index.vue';
@@ -569,6 +657,44 @@ const hostFormDialogWidth = ref(localStorage.getItem('samwaf_host_tab_placement'
 const onHostTabPlacementChange = (placement: string) => {
   hostFormDialogWidth.value = placement === 'top' ? 750 : 920;
 };
+// HostForm 内的全屏开关：全屏时弹窗放宽到 96%
+const hostFormFullscreen = ref(localStorage.getItem('samwaf_host_form_fullscreen') === '1');
+const hostFormEffectiveWidth = computed<number | string>(() => (hostFormFullscreen.value ? '96%' : hostFormDialogWidth.value));
+const onHostFullscreenChange = (full: boolean) => {
+  hostFormFullscreen.value = full;
+};
+
+/* ===== 端口占用总览（issue #955） ===== */
+const portOverviewVisible = ref(false);
+const portOverviewLoading = ref(false);
+const portOverviewRows = ref<Record<string, any>[]>([]);
+const portOverviewColumns = computed(() => [
+  { colKey: 'port', title: t('page.host.port_listen.col_port'), width: 90, cell: 'port' },
+  { colKey: 'active', title: t('page.host.port_listen.col_active'), width: 130, cell: 'active' },
+  { colKey: 'sites', title: t('page.host.port_listen.col_sites'), cell: 'sites' },
+  { colKey: 'status', title: t('page.host.port_listen.col_status'), width: 110, cell: 'status' },
+]);
+const handlePortOverview = () => {
+  portOverviewVisible.value = true;
+  portOverviewLoading.value = true;
+  // 响应拦截器返回的是整个报文 {code,msg,data}，列表在 data 里
+  getPortOverview({})
+    .then((res: any) => {
+      if (res && res.code === 0) {
+        portOverviewRows.value = Array.isArray(res.data) ? res.data : [];
+      } else {
+        portOverviewRows.value = [];
+        if (res && res.msg) MessagePlugin.error(res.msg);
+      }
+    })
+    .catch((e: any) => {
+      MessagePlugin.error(e && e.message ? e.message : String(e));
+    })
+    .finally(() => {
+      portOverviewLoading.value = false;
+    });
+};
+const portOverviewRowClass = ({ row }: { row: Record<string, any> }) => (row && row.conflict ? 'port-overview-conflict-row' : '');
 const confirmVisible = ref(false);
 const sslAutoApplyVisible = ref(false);
 const ImportXlsxVisible = ref(false);
@@ -1848,5 +1974,20 @@ onMounted(() => {
 
 .progress-actions {
   margin-top: 16px;
+}
+</style>
+
+<style>
+/* 网站表单全屏 + 端口占用总览行标红：t-dialog/表格挂到 body 上，
+   scoped 选择器够不着，必须写在非 scoped 块里。选择器都由专属类名限定，不影响其它弹窗。 */
+.host-form-dialog-fullscreen .t-dialog {
+  top: 2vh !important;
+  margin-bottom: 2vh;
+}
+.host-form-dialog-fullscreen .t-dialog__body {
+  max-height: calc(96vh - 92px) !important;
+}
+.port-overview-conflict-row td {
+  background: var(--td-error-color-1) !important;
 }
 </style>

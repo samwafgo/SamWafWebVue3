@@ -116,3 +116,21 @@ export function clearIpSourceProbe(params: Record<string, any>) {
     params,
   });
 }
+
+/** 端口监听表冲突预检（保存前提示，issue #955） */
+export function checkHostPorts(data: Record<string, any>) {
+  return request({
+    url: 'wafhost/host/checkports',
+    method: 'post',
+    data,
+  });
+}
+
+/** 端口占用总览：全机端口→协议→占用站点 */
+export function getPortOverview(params?: Record<string, any>) {
+  return request({
+    url: 'wafhost/port/overview',
+    method: 'get',
+    params,
+  });
+}
