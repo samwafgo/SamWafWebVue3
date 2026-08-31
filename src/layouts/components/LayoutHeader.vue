@@ -132,6 +132,9 @@ docker compose up -d</pre
       </div>
     </t-dialog>
 
+    <!-- 升级进度：弹窗内联展示 + 后台运行悬浮球，独立于上面的"有新版本"弹窗存活 -->
+    <update-progress ref="updateProgressRef" @retry="handleDoUpdate" @open-rollback="openRollbackDialog" />
+
     <!-- 版本回退对话框 -->
     <t-dialog v-model:visible="rollbackVisible" width="680px" header="版本回退" :confirm-btn="null" :cancel-btn="null">
       <t-alert theme="warning" style="margin-bottom: 16px">
@@ -204,6 +207,7 @@ import { getOnlineUrl } from '@/utils/usuallytool';
 import Notice from './Notice.vue';
 import Search from './Search.vue';
 import SystemMonitorWidget from './SystemMonitorWidget.vue';
+import UpdateProgress from './UpdateProgress.vue';
 import ChangePasswordDialog from '@/pages/waf/account/components/ChangePasswordDialog.vue';
 
 const router = useRouter();
@@ -255,12 +259,16 @@ const userOptions = computed<DropdownProps['options']>(() => [
 
 /** 个人自助修改密码 */
 const showChangePwd = ref(false);
+/** 升级进度面板（弹窗 + 悬浮球） */
+const updateProgressRef = ref<InstanceType<typeof UpdateProgress> | null>(null);
 
 const compiledMarkdown = computed(() => DOMPurify.sanitize(marked.parse(updateDesc.value || '') as string));
 
 onMounted(() => {
   // 首次提示，每隔24小时进行弹窗，其余实际不弹窗
   checkVersion('auto');
+  // 升级中刷新了页面：把进度捡回来，别让用户以为升级断了
+  updateProgressRef.value?.resume();
 });
 
 function onLangChange(data: { value?: string | number }) {
@@ -394,8 +402,10 @@ function handleDoUpdate() {
   DoUpdateApi(params)
     .then((res) => {
       if (res.code === 0) {
-        MessagePlugin.success(res.msg);
+        // 弹窗不再一关了之：换成进度面板，用户能看见跑到哪一步
         updateVisible.value = false;
+        isUpdateloading.value = false;
+        updateProgressRef.value?.start();
       } else {
         MessagePlugin.warning(res.msg);
         isUpdateloading.value = false;
