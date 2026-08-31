@@ -160,7 +160,7 @@
               <h4 class="hf-sect-title">
                 {{ t('page.host.sect.cert') }}
                 <span class="hf-sect-extra">
-                  <t-tag v-if="formData.ssl == '1'" theme="success" variant="light" size="small">{{ certSummary }}</t-tag>
+                  <t-tag v-if="formData.ssl == '1'" :theme="certSummaryTheme" variant="light" size="small">{{ certSummary }}</t-tag>
                   <t-tag v-else theme="default" variant="light" size="small">{{ t('page.host.sect.cert_off') }}</t-tag>
                 </span>
               </h4>
@@ -200,7 +200,7 @@
                     @change="handleSslChange"
                   >
                     <t-option key="" value="" :label="t('common.select_placeholder') + t('page.host.ssl_folder')" />
-                    <t-option v-for="item in sslConfigList" :key="item.id" :value="item.id" :label="`${item.domains} (${item.valid_to})`" />
+                    <t-option v-for="item in sslOptions" :key="item.value" :value="item.value" :label="item.label" />
                   </t-select>
 
                   <t-button style="margin-left: 10px" @click="handleAddNewSsl">{{ t('page.host.add_new_ssl') }}</t-button>
@@ -948,8 +948,11 @@ const props = withDefaults(
     hostGroups?: Record<string, any>[];
     // 打开时定位到哪个配置 Tab（1基础内容 4其他配置），供外部深链使用
     initTab?: number;
+    // 所在弹窗是否可见。弹窗内容只创建一次，不下发这个开关的话，
+    // 在证书申请页新签发的证书，回到列表再打开编辑时下拉里仍然没有（只剩一串ID）
+    dialogVisible?: boolean;
   }>(),
-  { isEdit: false, selectCanFilter: true, hostAddUrl: '', initTab: 0, hostGroups: () => [] },
+  { isEdit: false, selectCanFilter: true, hostAddUrl: '', initTab: 0, hostGroups: () => [], dialogVisible: false },
 );
 const emit = defineEmits<{
   (e: 'close'): void;
@@ -1462,13 +1465,37 @@ const rules: FormProps['rules'] = {
 const addSSLFormVisible = ref(false);
 const editSSLFormVisible = ref(false);
 const sslConfigList = ref<Record<string, any>[]>([]);
+// 证书夹下拉项。绑定ID在证书夹里找不到时（条目已被删除等）补一条同值选项，
+// 否则 t-select 直接把原始ID显示出来，看着像是没加载
+const sslOptions = computed(() => {
+  const list = sslConfigList.value.map((item) => ({
+    value: item.id,
+    label: `${item.domains} (${item.valid_to})`,
+  }));
+  const bindId = formData.value.bind_ssl_id;
+  if (bindId && !list.some((item) => item.value === bindId)) {
+    list.unshift({ value: bindId, label: t('page.host.ssl_folder_missing') });
+  }
+  return list;
+});
 // 证书小节标题右侧的一句话摘要：不展开也能看出绑的是哪张证书、什么时候到期
 const certSummary = computed(() => {
   const hit = sslConfigList.value.find((item) => item.id === formData.value.bind_ssl_id);
   if (hit) {
     return `${hit.domains} (${hit.valid_to})`;
   }
+  if (formData.value.bind_ssl_id) {
+    return t('page.host.sect.cert_missing');
+  }
   return t('page.host.sect.cert_unbound');
+});
+// 绑定的证书夹条目已不存在时用告警色，别拿绿色标签把这事盖过去
+const certSummaryTheme = computed(() => {
+  const bindId = formData.value.bind_ssl_id;
+  if (bindId && !sslConfigList.value.some((item) => item.id === bindId)) {
+    return 'warning';
+  }
+  return 'success';
 });
 const sslformData = ref<Record<string, any>>({ ...INITIAL_SSL_DATA });
 const sslformEditData = ref<Record<string, any>>({ ...INITIAL_SSL_DATA });
@@ -2250,6 +2277,15 @@ const onSubmit: FormProps['onSubmit'] = ({ validateResult, firstError }) => {
 
 getSslFolderList();
 getHttpsRedirectConfig();
+
+// 每次打开弹窗都重新拉一次证书夹：组件只创建一次，
+// 期间在证书申请/证书夹页面新增的证书，不刷新的话这里永远看不到
+watch(
+  () => props.dialogVisible,
+  (val) => {
+    if (val) getSslFolderList();
+  },
+);
 </script>
 
 <style scoped>

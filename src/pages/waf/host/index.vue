@@ -367,6 +367,7 @@
       </template>
       <host-form
         :value="formData"
+        :dialog-visible="addFormVisible"
         :select-can-filter="selectCanFilter"
         :host-groups="hostGroups"
         @group-changed="loadHostGroups"
@@ -390,6 +391,7 @@
       </template>
       <host-form
         :value="formEditData"
+        :dialog-visible="editFormVisible"
         :select-can-filter="selectCanFilter"
         :host-groups="hostGroups"
         @group-changed="loadHostGroups"
