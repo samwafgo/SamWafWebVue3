@@ -1600,7 +1600,9 @@ watch(
         cc.path_prefix = getOrDefault(cc, 'path_prefix', '');
         cc.expire_time = getOrDefault(cc, 'expire_time', 24);
         cc.ip_mode = getOrDefault(cc, 'ip_mode', 'nic');
-        cc.engine_type = getOrDefault(cc, 'engine_type', 'default');
+        // 兜底值必须是引擎认得的取值。写 'default' 会存进 captcha_json，
+        // 而引擎按验证方式分发挑战页时只认 traditional / capJs，取到别的值就发不出挑战。
+        cc.engine_type = getOrDefault(cc, 'engine_type', 'traditional');
         if (cc.cap_js_config == null) {
           cc.cap_js_config = {
             challengeCount: 50,
@@ -2140,6 +2142,8 @@ const onSubmit: FormProps['onSubmit'] = ({ validateResult, firstError }) => {
     });
 
     // 处理验证码配置
+    // ⚠️ 这是一张白名单：验证码配置新增字段必须同时加进来，
+    // 漏了的话界面上填得进去、保存也不报错，但值根本没进后端——静默丢弃。
     postdata.captcha_json = JSON.stringify({
       is_enable_captcha: parseInt(captchaConfigData.value.is_enable_captcha),
       path_prefix: captchaConfigData.value.path_prefix || '',
@@ -2147,6 +2151,7 @@ const onSubmit: FormProps['onSubmit'] = ({ validateResult, firstError }) => {
       expire_time: captchaConfigData.value.expire_time,
       ip_mode: captchaConfigData.value.ip_mode,
       engine_type: captchaConfigData.value.engine_type,
+      contact_info: captchaConfigData.value.contact_info || '',
       cap_js_config: captchaConfigData.value.cap_js_config,
     });
 
