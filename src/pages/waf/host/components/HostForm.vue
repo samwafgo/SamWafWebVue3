@@ -1968,7 +1968,9 @@ function getSslFolderList() {
   sslConfigListApi({ pageSize: 10000, remarks: '', code: '' })
     .then((res) => {
       if (res.code === 0) {
-        sslConfigList.value = res.data.list;
+        // 证书夹为空时后端返回 list:null，直接赋值会让 certSummary/sslOptions 在渲染中抛错，
+        // 整个弹窗从此不再更新（表现为点哪都没反应）
+        sslConfigList.value = res.data.list || [];
       }
     })
     .catch((e: Error) => {
