@@ -116,7 +116,12 @@ export const CODE = {
   NEED_BIND_2FA: -3,
   NEED_CHANGE_PWD: -4,
   NEED_REHANDSHAKE: -5,
+  // 后端存储本次不可用：登录状态没问题，保留登录态稍后重试，不能当鉴权失败处理
+  BACKEND_UNAVAILABLE: -6,
 } as const;
+
+// 首屏会并发十来个请求，后端不可用时会一起回来，同类提示只保留一条
+let lastBackendUnavailableAt = 0;
 
 /** 后端统一响应结构（data 在拦截器内已解密并反序列化） */
 export interface ApiResponse<T = any> {
@@ -214,6 +219,13 @@ instance.interceptors.response.use(
       router.replace({ path: '/login' });
     } else if (data.code === CODE.NEED_BIND_2FA) {
       router.replace({ path: '/account/otp' });
+    } else if (data.code === CODE.BACKEND_UNAVAILABLE) {
+      // 登录态不受影响：不保存返回地址、不清本地存储、不跳登录页
+      const now = Date.now();
+      if (now - lastBackendUnavailableAt > 3000) {
+        lastBackendUnavailableAt = now;
+        MessagePlugin.warning(data.msg || '服务暂时不可用，请稍后重试');
+      }
     } else if (data.code === CODE.NEED_CHANGE_PWD) {
       // 服务端强制改密门：令牌未改密即访问其他接口时触发，引导回登录重新进入强制改密流程
       saveCurrentUrl();
