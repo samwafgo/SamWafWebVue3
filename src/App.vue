@@ -30,6 +30,9 @@ const WS_RECONNECT_MAX_DELAY = 10000;
 // 连接活过这个时长才算「连上过」，重连间隔才复位。
 // 否则鉴权失败(-999)这类「一连上就被踢」的场景会退化成 1s 一次的死循环。
 const WS_STABLE_THRESHOLD = 30000;
+// 未登录时的等待间隔：这不是"断线重连"，不该走指数退避，
+// 否则登录成功后要干等十几秒才连上。
+const WS_TOKEN_WAIT_DELAY = 2000;
 
 let ws: WebSocket | null = null;
 // 握手是异步的，期间 ws 还是 null；没有这个标志，两次调用会双双穿过判断各建一条连接
@@ -38,6 +41,7 @@ let disConnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectDelay = WS_RECONNECT_BASE_DELAY;
 let wsOpenedAt = 0;
 let wsGeneration = 0;
+let tokenWaitTimer: ReturnType<typeof setTimeout> | null = null;
 let reloadDialog: ReturnType<typeof DialogPlugin> | null = null;
 
 function getSecurityPath(): string {
@@ -49,8 +53,35 @@ function getSecurityPath(): string {
   }
 }
 
+// 取当前可用的令牌；取不到或是字面量 null/undefined 都算没有
+function currentWsToken(): string {
+  try {
+    const t = localStorage.getItem('access_token');
+    if (!t || t === 'null' || t === 'undefined') return '';
+    return t;
+  } catch {
+    return '';
+  }
+}
+
+// 未登录期间按固定间隔轻量重试，不发起连接、不动退避间隔
+function scheduleTokenWait() {
+  if (tokenWaitTimer) return;
+  tokenWaitTimer = setTimeout(() => {
+    tokenWaitTimer = null;
+    initWebSocket();
+  }, WS_TOKEN_WAIT_DELAY);
+}
+
 async function initWebSocket() {
   if (ws || wsConnecting) return;
+  // 没有登录态就不建连接。WebSocket 带不了自定义头，令牌只能放进子协议，
+  // 未登录时传空子协议同样连不上，只是白白失败一次并触发重连退避。
+  const token = currentWsToken();
+  if (!token) {
+    scheduleTokenWait();
+    return;
+  }
   wsConnecting = true;
   try {
     // WebSocket 建连不能带自定义头，会话密钥只能走查询参数；
@@ -75,7 +106,7 @@ async function initWebSocket() {
   const gen = ++wsGeneration;
   ws = websocket.useWebSocket(
     url,
-    localStorage.getItem('access_token') || '',
+    token,
     () => wsOnOpen(gen),
     (e) => wsOnMessage(e, gen),
     () => wsOnClose(gen),
