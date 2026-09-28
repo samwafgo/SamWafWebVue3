@@ -62,3 +62,12 @@ export function wafIPBlockDelAllApi(params: Record<string, any>) {
     data: params,
   });
 }
+
+/** 推荐封禁层级(智能默认) */
+export function wafIPBlockRecommendLayerApi(params: Record<string, any>) {
+  return request({
+    url: '/wafhost/ipblock/recommend-layer',
+    method: 'get',
+    params,
+  });
+}

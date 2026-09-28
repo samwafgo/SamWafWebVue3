@@ -166,6 +166,12 @@ const wafRoutes: RouteRecordRaw[] = [
         component: () => import('@/pages/waf/analysis/SpiderActive.vue'),
         meta: { title: 'menu.analysis.analysis_spider_title' },
       },
+      {
+        path: 'wafanalysissourcepath',
+        name: 'WafAnalysisSourcePath',
+        component: () => import('@/pages/waf/analysis/SourcePath.vue'),
+        meta: { title: 'menu.analysis.analysis_source_path_title' },
+      },
     ],
   },
   {
