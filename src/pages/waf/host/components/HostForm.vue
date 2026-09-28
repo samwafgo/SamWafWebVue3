@@ -611,6 +611,16 @@
                 />
               </t-tooltip>
             </t-form-item>
+            <t-form-item :label="t('page.host.exclude_ip_log')" name="exclude_ip_log">
+              <t-tooltip :content="t('page.host.exclude_ip_log_tips')" placement="top" :overlay-style="{ width: '260px' }" show-arrow>
+                <t-textarea
+                  v-model="formData.exclude_ip_log"
+                  :style="{ width: '480px' }"
+                  :placeholder="t('page.host.exclude_ip_log_tips')"
+                  name="exclude_ip_log"
+                />
+              </t-tooltip>
+            </t-form-item>
             <t-form-item :label="t('page.host.insecure_skip_verify')" name="insecure_skip_verify">
               <t-tooltip :content="t('page.host.insecure_skip_verify_tips')" placement="top" :overlay-style="{ width: '200px' }" show-arrow>
                 <t-radio-group v-model="formData.insecure_skip_verify">
