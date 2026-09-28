@@ -1,5 +1,11 @@
 <template>
   <div class="detail-base">
+    <t-alert
+      v-if="payloadMissing"
+      theme="info"
+      :message="t('page.visit_log.detail.payload_missing')"
+      style="margin-bottom: 12px"
+    />
     <t-tag
       v-if="detail_data.rule !== '' && detail_data.log_only_mode !== '0'"
       :theme="detail_data.log_only_mode === '1' ? 'danger' : 'success'"
@@ -338,6 +344,7 @@ const route = useRoute();
 const router = useRouter();
 
 const detail_data = ref<Record<string, any>>({});
+const detailLoaded = ref(false); // 详情已返回（payloadMissing 提示要等数据回来再判断）
 const quickAddRuleChecked = ref(false);
 const bodyExpanded = ref(false);
 const resBodyExpanded = ref(false);
@@ -375,6 +382,13 @@ const displayResBody = computed(() => {
 const isOwaspRule = computed(() => {
   const rule = detail_data.value.rule || '';
   return rule.startsWith('OWASP:');
+});
+// 报文列全空 = 这条没有报文行：正常请求默认只记访问行，
+// 采样命中或观察名单内的请求才有报文（user_agent/url 是窄行字段，不算报文）
+const payloadMissing = computed(() => {
+  if (!detailLoaded.value) return false;
+  const d = detail_data.value || {};
+  return !d.header && !d.cookies && !d.body && !d.post_form && !d.res_header && !d.res_body;
 });
 const owaspRuleId = computed(() => {
   const rule = detail_data.value.rule || '';
@@ -529,6 +543,7 @@ function getDetail(uuidAndName?: string) {
 
   detail_req.req_uuid = id;
   detail_req.current_db = currentDbName;
+  detailLoaded.value = false;
   bodyExpanded.value = false;
   resBodyExpanded.value = false;
   geWebLogDetail({
@@ -538,6 +553,7 @@ function getDetail(uuidAndName?: string) {
     .then((res) => {
       if (res.code === 0) {
         detail_data.value = res.data;
+        detailLoaded.value = true;
       }
     })
     .catch((e: Error) => {

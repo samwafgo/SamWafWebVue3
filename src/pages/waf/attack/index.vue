@@ -98,6 +98,27 @@
               </t-form-item>
             </t-col>
           </t-row>
+
+          <t-row :gutter="16">
+            <t-col :span="6">
+              <t-form-item label="访问日志档位" name="access_log_mode">
+                <t-select v-model="logConfig.access_log_mode" style="width: 100%">
+                  <t-option value="db" label="全部入库" />
+                  <t-option value="sample" label="采样入库" />
+                  <t-option value="off" label="仅安全事件" />
+                </t-select>
+                <div v-if="logConfig.access_log_mode !== 'db'" class="log-config-hint">
+                  「仅安全事件」会失去 CC 阈值推荐、AI 训练负样本与异常 IP 的正常行为回溯
+                </div>
+              </t-form-item>
+            </t-col>
+
+            <t-col :span="6">
+              <t-form-item label="访问日志保留天数" name="access_log_retention_days">
+                <t-input-number v-model="logConfig.access_log_retention_days" style="width: 100%" :min="1" />
+              </t-form-item>
+            </t-col>
+          </t-row>
         </t-form>
       </div>
     </t-card>
@@ -198,7 +219,14 @@
           class="table-toolbar"
           style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px"
         >
-          <div class="left-actions"></div>
+          <div class="left-actions">
+            <!-- 视图切换：访问日志=全量窄行（事件双写在内），安全事件=命中子集。
+                 内嵌在风险日志详情里时，访问日志视图就是该 IP 的「全部行为」 -->
+            <t-radio-group v-model="searchformData.view_type" variant="default-filled" size="small" @change="onViewTypeChange">
+              <t-radio-button value="access">{{ accessViewLabel }}</t-radio-button>
+              <t-radio-button value="event">{{ t('page.visit_log.view_event') }}</t-radio-button>
+            </t-radio-group>
+          </div>
           <div class="right-actions">
             <t-space>
               <t-button theme="default" variant="outline" size="small" @click="toggleColumnController">
@@ -291,12 +319,31 @@
     <t-dialog
       v-model:visible="exportDbVisible"
       :header="t('page.visit_log.export_db_file_header')"
-      :body="t('page.visit_log.export_db_file_content')"
-      width="40%"
+      width="520px"
       :confirm-on-enter="true"
       :on-close="() => (exportDbVisible = false)"
       @confirm="handelExport"
     >
+      <t-alert theme="info" :message="t('page.visit_log.export_db_file_content')" style="margin-bottom: 12px" />
+      <t-form :label-width="110">
+        <t-form-item :label="t('page.visit_log.export_time_range')">
+          <t-date-range-picker
+            v-model="exportForm.range"
+            enable-time-picker
+            clearable
+            value-type="YYYY-MM-DD HH:mm:ss"
+            style="width: 100%"
+          />
+        </t-form-item>
+        <t-form-item :label="t('page.visit_log.export_tiers')">
+          <t-checkbox-group v-model="exportForm.tiers">
+            <t-checkbox value="access">{{ t('page.visit_log.view_access') }}</t-checkbox>
+            <t-checkbox value="event">{{ t('page.visit_log.view_event') }}</t-checkbox>
+            <t-checkbox value="payload">{{ t('page.visit_log.export_tier_payload') }}</t-checkbox>
+            <t-checkbox value="weblog">{{ t('page.visit_log.export_tier_weblog') }}</t-checkbox>
+          </t-checkbox-group>
+        </t-form-item>
+      </t-form>
     </t-dialog>
 
     <t-dialog
@@ -497,7 +544,7 @@ const attackLogStore = useAttackLogStore();
 const staticColumn = ['action', 'op'];
 
 // 默认不显示的可选列：新增后不会被"新列自动加入"逻辑塞进已有用户的可见列，需用户主动勾选
-const OPT_OUT_NEW_COLUMNS = ['host_nickname', 'ai_score'];
+const OPT_OUT_NEW_COLUMNS = ['host_nickname', 'ai_score', 'user_agent', 'referer'];
 
 // 列配置持久化：服务端（按登录账号）为准，localStorage 只作首屏秒开缓存 + 接口不可用兜底。
 // v2 起把"可见列"与"用户已见过的列基线"合并到同一个 key，
@@ -509,7 +556,7 @@ const COLUMN_PREF_NAME = 'visit_log_columns'; // 服务端偏好名（后端白�
 
 // 可由外部路由 query 预设的筛选字段（必须是 searchformData 的合法键，防止任意 query 注入）。
 // 不含 unix_add_time_begin/end（由日期控件驱动）和 current_db_name（由 loadShareDbList 异步定值）
-const ROUTE_FILTER_QUERY_KEYS = ['action', 'src_ip', 'host_code', 'rule', 'req_uuid', 'status_code', 'method', 'log_only_mode'];
+const ROUTE_FILTER_QUERY_KEYS = ['action', 'src_ip', 'host_code', 'rule', 'req_uuid', 'status_code', 'method', 'log_only_mode', 'view_type'];
 // 外部页面可用这两个 query 指定日期区间（形如 2026-07-01 00:00:00），不传则用"今天"
 const ROUTE_DATE_QUERY_KEYS = ['date_begin', 'date_end'];
 
@@ -703,7 +750,8 @@ const inputFilter = {
   showConfirmAndReset: true,
 };
 
-const columns = computed<TableProps['columns']>(() => [
+// 全部列定义（访问日志视图由 computed columns 摘掉 header 列——报文已搬进报文表，窄行没有这一列）
+const allColumns = computed<TableProps['columns']>(() => [
   {
     title: t('page.visit_log.guest_identity'),
     width: 100,
@@ -749,8 +797,36 @@ const columns = computed<TableProps['columns']>(() => [
     filter: { ...inputFilter, props: { placeholder: t('common.placeholder') } },
   },
   { title: 'status', width: 100, ellipsis: true, colKey: 'status' },
+  {
+    // UA / Referer：窄行上的列，两个视图都可筛选；访问日志视图靠它们替代「请求」全文筛选
+    title: t('page.visit_log.user_agent'),
+    width: 200,
+    ellipsis: true,
+    colKey: 'user_agent',
+    filter: { ...inputFilter, props: { placeholder: t('common.placeholder') } },
+  },
+  {
+    title: t('page.visit_log.referer'),
+    width: 200,
+    ellipsis: true,
+    colKey: 'referer',
+    filter: { ...inputFilter, props: { placeholder: t('common.placeholder') } },
+  },
   { align: 'left', width: 120, colKey: 'op', title: t('common.op') },
 ]);
+
+// 当前视图可见的列：访问日志视图没有 header 列（报文已搬进报文表，UA/Referer 顶替它的筛选位）
+const columns = computed<TableProps['columns']>(() => {
+  if (searchformData.value.view_type !== 'access') {
+    return allColumns.value;
+  }
+  return (allColumns.value || []).filter((c: any) => c.colKey !== 'header');
+});
+
+// 内嵌在风险日志详情里时，访问日志视图展示的是该 IP 的全部行为
+const accessViewLabel = computed(() =>
+  props.attack_ip !== '' ? t('page.visit_log.view_access_all') : t('page.visit_log.view_access'),
+);
 
 // 可用字段列表
 const availableFields = computed(() => [
@@ -762,6 +838,8 @@ const availableFields = computed(() => [
   { value: 'method', label: t('page.visit_log.access_method') },
   { value: 'url', label: t('page.visit_log.access_url') },
   { value: 'header', label: t('page.visit_log.request') },
+  { value: 'user_agent', label: t('page.visit_log.user_agent') },
+  { value: 'referer', label: t('page.visit_log.referer') },
   { value: 'country', label: t('page.visit_log.country') },
   { value: 'province', label: t('page.visit_log.province') },
   { value: 'city', label: t('page.visit_log.city') },
@@ -792,6 +870,7 @@ const searchformData = ref<Record<string, any>>({
   unix_add_time_end: '',
   current_db_name: 'local_log.db',
   log_only_mode: '',
+  view_type: 'access', // access=访问日志(全量窄行) event=安全事件
 });
 
 // 排序字段
@@ -828,6 +907,11 @@ function openHostProbe() {
 const host_nickname_dic = reactive<Record<string, string>>({});
 const share_db_dic = reactive<Record<string, string>>({});
 const exportDbVisible = ref(false);
+// 导出物=「按时间段导出选定层」的新 SQLite 文件（不再是整库备份）
+const exportForm = reactive<{ range: string[]; tiers: string[] }>({
+  range: [],
+  tiers: ['access', 'event', 'payload', 'weblog'],
+});
 // 当前是否为文件型数据库(SQLite)：仅 SQLite 支持日志文件导出，MySQL 隐藏导出按钮
 const isFileBasedDb = ref(true);
 const visitDetailVisible = ref(false); // 访问详情弹窗
@@ -848,6 +932,8 @@ const logConfig = ref<Record<string, any>>({
   log_persist_enable: '0',
   batch_insert: '0',
   ip_tag_db: '0',
+  access_log_mode: 'db',
+  access_log_retention_days: '30',
 });
 const logConfigItems = ref<Record<string, any>>({});
 
@@ -1197,6 +1283,8 @@ function applyRouteFilterQuery(picked: Record<string, string>) {
 function updateSearchFormAttackPage() {
   if (props.attack_ip !== '') {
     searchformData.value.src_ip = props.attack_ip;
+    // 风险详情默认落在安全事件视图（命中明细）；旁边的「全部行为」页签是该 IP 的访问日志视图
+    searchformData.value.view_type = 'event';
     dateControl.range1 = ['2022-01-01 00:00:00', `${NowDate} 23:59:59`];
     searchformData.value.unix_add_time_begin = ConvertStringToUnix(dateControl.range1[0]).toString();
     searchformData.value.unix_add_time_end = ConvertStringToUnix(dateControl.range1[1]).toString();
@@ -1309,24 +1397,21 @@ function getList(keyword?: string) {
 }
 
 function handelExport() {
-  searchformData.value.unix_add_time_begin = ConvertStringToUnix(dateControl.range1[0]).toString();
-  searchformData.value.unix_add_time_end = ConvertStringToUnix(dateControl.range1[1]).toString();
-  const sortDescending = sorts.descending ? 'desc' : 'asc';
-
+  if (exportForm.tiers.length === 0) {
+    MessagePlugin.warning(t('page.visit_log.export_tiers'));
+    return;
+  }
   exportlog({
-    batch_size: 1000,
-    pageSize: pagination.pageSize,
-    pageIndex: pagination.current,
-    sort_by: sorts.sortBy,
-    sort_descending: sortDescending,
-    filter_by: filters.filter_by,
-    filter_value: filters.filter_value,
-    unix_add_time_begin: ConvertStringToUnix(dateControl.range1[0]).toString(),
-    unix_add_time_end: ConvertStringToUnix(dateControl.range1[1]).toString(),
-    ...searchformData.value,
+    start_time: (exportForm.range && exportForm.range[0]) || '',
+    end_time: (exportForm.range && exportForm.range[1]) || '',
+    tiers: exportForm.tiers.join(','),
   })
     .then((res) => {
-      console.log(res);
+      if (res.code === 0) {
+        MessagePlugin.success(t('page.visit_log.export_started'));
+      } else {
+        MessagePlugin.error(res.msg || t('page.visit_log.export_db_file_header'));
+      }
     })
     .catch((e: Error) => {
       console.log(e);
@@ -1383,6 +1468,16 @@ function onSortChange(sorter: any) {
   getList('');
 }
 
+// 切换访问日志/安全事件视图。「请求」全文筛选只在安全事件视图有，切走时摘掉，否则后端会拒
+function onViewTypeChange() {
+  if (searchformData.value.view_type !== 'event' && filters.filter_by.indexOf('header') >= 0) {
+    filters.filter_by = '';
+    filters.filter_value = '';
+  }
+  pagination.current = 1;
+  getList('');
+}
+
 /**
  * 筛选结果
  */
@@ -1414,6 +1509,25 @@ function onFilterChange(e: Record<string, any>) {
       filters.filter_value = `${filters.filter_value}|${e.header}`;
     }
   }
+  //User-Agent / Referer（窄行列，两个视图都可用）
+  if (e.user_agent !== undefined && e.user_agent !== '') {
+    if (filters.filter_by === '') {
+      filters.filter_by = 'user_agent';
+      filters.filter_value = e.user_agent;
+    } else {
+      filters.filter_by = `${filters.filter_by}|user_agent`;
+      filters.filter_value = `${filters.filter_value}|${e.user_agent}`;
+    }
+  }
+  if (e.referer !== undefined && e.referer !== '') {
+    if (filters.filter_by === '') {
+      filters.filter_by = 'referer';
+      filters.filter_value = e.referer;
+    } else {
+      filters.filter_by = `${filters.filter_by}|referer`;
+      filters.filter_value = `${filters.filter_value}|${e.referer}`;
+    }
+  }
   getList('');
 }
 
@@ -1441,6 +1555,8 @@ const LOG_CONFIG_KEYS = [
   'log_persist_enable',
   'batch_insert',
   'ip_tag_db',
+  'access_log_mode',
+  'access_log_retention_days',
 ];
 
 // 加载日志配置
@@ -1561,5 +1677,12 @@ defineExpose({ resetState });
   font-size: 12px;
   color: var(--td-text-color-secondary);
   margin-top: 4px;
+}
+
+.log-config-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--td-warning-color);
+  line-height: 1.4;
 }
 </style>

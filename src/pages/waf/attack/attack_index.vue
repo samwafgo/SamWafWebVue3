@@ -86,14 +86,19 @@
                 :value="ipTagDb"
                 variant="default-filled"
                 size="small"
-                :disabled="ipTagDbSaving"
+                :disabled="ipTagDbSaving || ipTagMerging"
                 @change="onIpTagDbChange"
               >
                 <t-radio-button value="0">{{ t('page.attack_log.iptag_db_main') }}</t-radio-button>
                 <t-radio-button value="1">{{ t('page.attack_log.iptag_db_stats') }}</t-radio-button>
               </t-radio-group>
               <div class="foot-hint">
-                {{ ipTagDb === '1' ? t('page.attack_log.iptag_db_current_stats') : t('page.attack_log.iptag_db_current_main') }}
+                <template v-if="ipTagMerging">
+                  <t-loading size="12px" style="margin-right: 4px" />{{ t('page.attack_log.iptag_db_merging') }}
+                </template>
+                <template v-else>
+                  {{ ipTagDb === '1' ? t('page.attack_log.iptag_db_current_stats') : t('page.attack_log.iptag_db_current_main') }}
+                </template>
               </div>
             </div>
           </template>
@@ -127,6 +132,9 @@
               @click="handleDeleteTag()"
             >
               {{ t('page.attack_log.delete_current_tag') }}
+            </t-button>
+            <t-button theme="default" variant="outline" size="small" @click="openWatchListDialog">
+              {{ t('page.visit_log.watch_manage') }}
             </t-button>
             <t-button theme="danger" variant="outline" size="small" @click="handleBatchDeleteTag">
               {{ t('common.batch_delete.title') }}
@@ -182,6 +190,7 @@
               </template>
               <template #op="slotProps">
                 <a class="t-button-link" @click="handleClickDetail(slotProps)">{{ t('common.details') }}</a>
+                <a class="t-button-link" style="margin-left: 8px" @click="openWatchDialog(slotProps.row)">{{ t('page.visit_log.watch_add') }}</a>
               </template>
             </t-table>
           </div>
@@ -260,20 +269,76 @@
     >
       <web-log-list ref="childLog" :attack_ip="trans_to_parent_ip"></web-log-list>
     </t-dialog>
+
+    <!-- 加入观察名单 -->
+    <t-dialog
+      v-model:visible="watchDialogVisible"
+      :header="t('page.visit_log.watch_dialog_title')"
+      width="420px"
+      :confirm-btn="{ content: t('common.confirm'), loading: watchSaving }"
+      :on-confirm="confirmWatchAdd"
+      :on-close="() => (watchDialogVisible = false)"
+    >
+      <t-form :label-width="90">
+        <t-form-item label="IP">
+          <t-input v-model="watchForm.ip" readonly />
+        </t-form-item>
+        <t-form-item :label="t('page.visit_log.watch_days')">
+          <t-input-number v-model="watchForm.days" :min="1" :max="30" style="width: 100%" />
+        </t-form-item>
+        <t-form-item :label="t('page.visit_log.watch_reason')">
+          <t-input v-model="watchForm.reason" :placeholder="t('page.visit_log.watch_reason_placeholder')" />
+        </t-form-item>
+      </t-form>
+    </t-dialog>
+
+    <!-- 观察名单管理 -->
+    <t-dialog
+      v-model:visible="watchListVisible"
+      :header="t('page.visit_log.watch_manage')"
+      width="720px"
+      :footer="false"
+      :on-close="() => (watchListVisible = false)"
+    >
+      <t-table
+        :columns="watchListColumns"
+        :data="watchListData"
+        size="small"
+        row-key="id"
+        :loading="watchListLoading"
+        :pagination="watchListPagination"
+        :empty="t('page.visit_log.watch_empty')"
+        @page-change="onWatchPageChange"
+      >
+        <template #expire_at="{ row }">{{ formatWatchExpire(row.expire_at) }}</template>
+        <template #op="{ row }">
+          <a class="t-button-link" @click="handleWatchRemove(row)">{{ t('page.visit_log.watch_remove') }}</a>
+        </template>
+      </t-table>
+    </t-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next';
 import { SearchIcon } from 'tdesign-icons-vue-next';
 import type { PageInfo, TableProps } from 'tdesign-vue-next';
 
 import WebLogList from './index.vue';
-import { allattacktaglist, attackIpListApi, deleteTagByNameApi } from '@/apis/waflog/attacklog';
+import {
+  allattacktaglist,
+  attackIpListApi,
+  deleteTagByNameApi,
+  ipTagDbStatusApi,
+  ipWatchlistAddApi,
+  ipWatchlistDelApi,
+  ipWatchlistListApi,
+} from '@/apis/waflog/attacklog';
 import { edit_system_config_api, get_detail_by_item_api } from '@/apis/systemconfig';
 import { getOnlineUrl } from '@/utils/usuallytool';
+import { ConvertUnixToDate } from '@/utils/date';
 
 // 点列表里的 IP 直接开归属查询，省得用户复制粘贴
 const ipLookupRef = ref<any>(null);
@@ -337,8 +402,25 @@ const closedGroups = ref<Record<string, boolean>>({});
 const ipTagDb = ref('0');
 const ipTagDbItem = ref<Record<string, any> | null>(null);
 const ipTagDbSaving = ref(false);
+// 切换归属后后端会把另一个库的历史标签并过来，合并期间列表数字还在变，界面要如实说明
+const ipTagMerging = ref(false);
+let ipTagMergeTimer: ReturnType<typeof setTimeout> | null = null;
 const attackIpVisible = ref(false); // 访问明细
 const trans_to_parent_ip = ref(''); // 传递给子组件
+// 观察名单
+const watchDialogVisible = ref(false);
+const watchSaving = ref(false);
+const watchForm = reactive({ ip: '', days: 7, reason: '' });
+const watchListVisible = ref(false);
+const watchListData = ref<Record<string, any>[]>([]);
+const watchListLoading = ref(false);
+const watchListPagination = reactive({ current: 1, pageSize: 10, total: 0 });
+const watchListColumns = computed<TableProps['columns']>(() => [
+  { colKey: 'ip', title: 'IP', width: 150 },
+  { colKey: 'reason', title: t('page.visit_log.watch_reason'), ellipsis: true },
+  { colKey: 'expire_at', title: t('page.visit_log.watch_expire_at'), width: 170, cell: 'expire_at' },
+  { colKey: 'op', title: t('common.op'), width: 80 },
+]);
 const batchDeleteVisible = ref(false);
 // 批量删除用的是「含被排除标签」的完整清单，否则被排除的标签没入口清理历史数据
 const batchTagOptions = ref<{ label: string; value: string; count?: number }[]>([]);
@@ -439,7 +521,47 @@ onMounted(() => {
   getIpTags();
   getList('');
   loadIpTagDb();
+  // 合并可能是上一次会话触发的，进页面先问一次后端在不在跑
+  pollIpTagMerge(false);
 });
+
+onBeforeUnmount(() => {
+  stopIpTagMergePoll();
+});
+
+function stopIpTagMergePoll() {
+  if (ipTagMergeTimer) {
+    clearTimeout(ipTagMergeTimer);
+    ipTagMergeTimer = null;
+  }
+}
+
+// 问一次合并状态：还在跑就 2 秒后再问；跑完了(refreshOnDone)把列表按新库重拉一遍
+function pollIpTagMerge(refreshOnDone: boolean) {
+  ipTagDbStatusApi()
+    .then((res) => {
+      if (res.code !== 0 || !res.data) return;
+      const merging = res.data.merging === true;
+      const was = ipTagMerging.value;
+      ipTagMerging.value = merging;
+      if (merging) {
+        stopIpTagMergePoll();
+        ipTagMergeTimer = setTimeout(() => pollIpTagMerge(true), 2000);
+        return;
+      }
+      stopIpTagMergePoll();
+      if (was && refreshOnDone) {
+        MessagePlugin.success(t('page.attack_log.iptag_db_merge_done'));
+        getIpTags();
+        getList('');
+      }
+    })
+    .catch(() => {
+      // 状态查不到就当没在合并，不打扰用户
+      stopIpTagMergePoll();
+      ipTagMerging.value = false;
+    });
+}
 
 // 读当前的 IP Tag 存放位置（与访问日志页的日志配置是同一个配置项）
 function loadIpTagDb() {
@@ -516,6 +638,9 @@ function doSaveIpTagDb(next: string) {
         pagination.current = 1;
         getIpTags();
         getList('');
+        // 后端这时候正在把另一个库的历史标签并过来，盯着它，并完再拉一次
+        ipTagMerging.value = true;
+        pollIpTagMerge(true);
       } else {
         MessagePlugin.warning(res.msg);
       }
@@ -577,6 +702,79 @@ function handleClickDetail(e: { row: Record<string, any> }) {
   const { ip } = e.row;
   attackIpVisible.value = true;
   trans_to_parent_ip.value = ip;
+}
+
+// 观察名单：加入/续期（已存在则到期时间取更晚者）
+function openWatchDialog(row: Record<string, any>) {
+  watchForm.ip = row.ip;
+  watchForm.days = 7;
+  watchForm.reason = '';
+  watchDialogVisible.value = true;
+}
+
+function confirmWatchAdd() {
+  if (!watchForm.ip) return;
+  watchSaving.value = true;
+  ipWatchlistAddApi({ ip: watchForm.ip, days: watchForm.days, reason: watchForm.reason })
+    .then((res) => {
+      if (res.code === 0) {
+        MessagePlugin.success(t('page.visit_log.watch_added'));
+        watchDialogVisible.value = false;
+      } else {
+        MessagePlugin.error(res.msg);
+      }
+    })
+    .catch(() => {})
+    .finally(() => {
+      watchSaving.value = false;
+    });
+}
+
+// 观察名单管理弹窗
+function openWatchListDialog() {
+  watchListVisible.value = true;
+  watchListPagination.current = 1;
+  loadWatchList();
+}
+
+function loadWatchList() {
+  watchListLoading.value = true;
+  ipWatchlistListApi({ pageIndex: watchListPagination.current, pageSize: watchListPagination.pageSize })
+    .then((res) => {
+      if (res.code === 0) {
+        watchListData.value = res.data.list || [];
+        watchListPagination.total = res.data.total;
+      }
+    })
+    .catch(() => {})
+    .finally(() => {
+      watchListLoading.value = false;
+    });
+}
+
+function onWatchPageChange(curr: PageInfo) {
+  watchListPagination.current = curr.current;
+  watchListPagination.pageSize = curr.pageSize;
+  loadWatchList();
+}
+
+function formatWatchExpire(ts: number) {
+  if (!ts) return '-';
+  return ConvertUnixToDate(ts * 1000);
+}
+
+function handleWatchRemove(row: Record<string, any>) {
+  if (!window.confirm(t('page.visit_log.watch_remove_confirm'))) return;
+  ipWatchlistDelApi({ ip: row.ip })
+    .then((res) => {
+      if (res.code === 0) {
+        MessagePlugin.success(t('page.visit_log.watch_removed'));
+        loadWatchList();
+      } else {
+        MessagePlugin.error(res.msg);
+      }
+    })
+    .catch(() => {});
 }
 
 // Jump Url

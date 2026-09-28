@@ -65,8 +65,10 @@ const props = withDefaults(
   defineProps<{
     ip?: string;
     tags?: RawTag[];
+    // 该行的总计数（放行榜就是放行次数）：tags 为空时用它合成「正常」芯片兜底
+    count?: number | string;
   }>(),
-  { ip: '', tags: () => [] },
+  { ip: '', tags: () => [], count: 0 },
 );
 
 const emit = defineEmits<{
@@ -104,17 +106,23 @@ function categoryOf(tag: string) {
   return 'other';
 }
 
-// 按触发次数倒序，次数相同的按标签名稳定排序
-const sortedTags = computed<CatTag[]>(() =>
-  (props.tags || [])
+// 按触发次数倒序，次数相同的按标签名稳定排序。
+// ip_tags 不再记「正常」标签：一个只放行过的 IP 标签列表是空的，
+// 合成一个「正常」芯片兜底，不然放行榜的标签列会整列空白。
+const sortedTags = computed<CatTag[]>(() => {
+  const list = (props.tags || [])
     .filter((item) => item && item.ip_tag)
     .map((item) => ({
       ip_tag: item.ip_tag,
       cnt: Number(item.cnt) || 0,
       cat: categoryOf(item.ip_tag),
     }))
-    .sort((a, b) => b.cnt - a.cnt || a.ip_tag.localeCompare(b.ip_tag)),
-);
+    .sort((a, b) => b.cnt - a.cnt || a.ip_tag.localeCompare(b.ip_tag));
+  if (list.length === 0 && Number(props.count) > 0) {
+    return [{ ip_tag: t('dashboard.ip_rank.tag_normal'), cnt: Number(props.count), cat: 'pass' }];
+  }
+  return list;
+});
 
 // 主标签优先取「非放行」里次数最多的，否则一个正常访问多的攻击 IP 会顶着「正常」上榜
 const leadTag = computed(() => sortedTags.value.find((item) => item.cat !== 'pass') || sortedTags.value[0]);
