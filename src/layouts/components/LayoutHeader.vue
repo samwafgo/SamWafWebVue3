@@ -453,13 +453,16 @@ function handleConfirmRollback() {
       DoRollbackApi({ version: target.version })
         .then((res) => {
           if (res.code === 0) {
+            dia.destroy();
             MessagePlugin.success(res.msg || '已发起回退，等待重启通知');
             rollbackVisible.value = false;
           } else {
+            dia.hide();
             MessagePlugin.warning(res.msg || '回退失败');
           }
         })
         .catch(() => {
+          dia.hide();
           MessagePlugin.warning('回退请求失败');
         })
         .finally(() => {

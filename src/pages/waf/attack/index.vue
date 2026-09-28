@@ -225,7 +225,7 @@
                   <span :title="t('page.visit_log.shard_auto_tip')">{{ t('page.visit_log.shard_auto') }}</span>
                 </t-option>
                 <t-option-group v-for="g in shardGroups" :key="g.label" :label="g.label">
-                  <t-option v-for="it in g.options" :key="it.value" :value="it.value" :label="it.label">
+                  <t-option v-for="it in g.options" :key="it.value" :value="it.value" :label="it.label" :disabled="it.disabled">
                     <span :title="it.value">{{ it.label }}</span>
                   </t-option>
                 </t-option-group>
@@ -263,6 +263,23 @@
             {{ t('page.visit_log.query_partial', { ms: queryMeta.took_ms }) }}
             <a class="t-button-link" style="margin-left: 8px" @click="narrowRange">{{
               t('page.visit_log.query_partial_narrow')
+            }}</a>
+          </template>
+        </t-alert>
+
+        <!-- 分区登记还在、存储却不在了（或文件里一行都没有）：说清楚是哪个，给出处理入口 -->
+        <t-alert v-if="queryMeta.issues && queryMeta.issues.length > 0" theme="warning" style="margin-bottom: 12px">
+          <template #message>
+            <div>{{ t('page.visit_log.shard_issue_title') }}</div>
+            <div v-for="iss in queryMeta.issues" :key="iss.name" :title="iss.name" style="margin-top: 2px">
+              {{ shardTitle(iss.name) }}：{{
+                iss.kind === 'missing'
+                  ? t('page.visit_log.shard_issue_missing', { n: iss.registered })
+                  : t('page.visit_log.shard_issue_empty', { n: iss.registered })
+              }}
+            </div>
+            <a v-if="attack_ip === ''" class="t-button-link" @click="openShardManage">{{
+              t('page.visit_log.shard_issue_manage')
             }}</a>
           </template>
         </t-alert>
@@ -442,6 +459,9 @@
         </template>
         <template #tiers="{ row }">
           <span v-if="row.is_current" style="color: rgba(0, 0, 0, 0.4)">—</span>
+          <t-tag v-else-if="row.missing" size="small" theme="danger" variant="light">
+            {{ t('page.visit_log.shard_missing') }}
+          </t-tag>
           <span v-else-if="!row.tiers || row.tiers.length === 0" style="color: rgba(0, 0, 0, 0.4)">
             {{ t('page.visit_log.shard_tier_unknown') }}
           </span>
@@ -753,8 +773,9 @@ const queryMeta = ref<Record<string, any>>({
   sort_forced_time: false,
   partial: false,
   took_ms: 0,
+  issues: [],
 });
-const shardGroups = ref<Array<{ label: string; options: Array<{ value: string; label: string }> }>>([]);
+const shardGroups = ref<Array<{ label: string; options: Array<{ value: string; label: string; disabled?: boolean }> }>>([]);
 const covExpanded = ref(false);
 const shardManageVisible = ref(false);
 const shardRows = ref<Record<string, any>[]>([]);
@@ -1502,8 +1523,10 @@ function shardLabel(item: Record<string, any>): string {
   }
   // 按层过期之后，窄行那一层可能已经被回收，只剩安全事件与报文——
   // 下拉里得标出来，否则选中它再切到访问日志视图只会得到一句生硬的报错
-  const note =
-    item.tiers && item.tiers.length > 0 && item.tiers.indexOf('access_log') < 0
+  // 登记还在、存储已不在：照样列出来（好让人知道有这么个分区、去分区管理删登记），但选不了
+  const note = item.missing
+    ? ` · ${t('page.visit_log.shard_missing')}`
+    : item.tiers && item.tiers.length > 0 && item.tiers.indexOf('access_log') < 0
       ? ` · ${t('page.visit_log.shard_only_event')}`
       : '';
   if (item.period_key && item.period_key.length >= 6) {
@@ -1523,7 +1546,7 @@ function shardLabel(item: Record<string, any>): string {
     return `${from} ~ ${to}${cnt}${note}`;
   }
   // 时间信息都缺（脏数据）：退回显示原始标识，至少还能对上库里的东西
-  return item.file_name + cnt;
+  return item.file_name + cnt + note;
 }
 
 // 内嵌模式下没有时间控件，用快选改范围
@@ -1556,7 +1579,7 @@ function tierLabel(tier: string): string {
 
 function confirmDeleteShard(row: Record<string, any>) {
   const name = shardTitle(row.file_name);
-  DialogPlugin.confirm({
+  const confirmDia = DialogPlugin.confirm({
     header: t('page.visit_log.shard_del_title'),
     body: t('page.visit_log.shard_del_body', { name, raw: row.file_name }),
     theme: 'warning',
@@ -1565,6 +1588,7 @@ function confirmDeleteShard(row: Record<string, any>) {
       delsharedb({ file_name: row.file_name })
         .then((res) => {
           if (res.code === 0) {
+            confirmDia.destroy();
             MessagePlugin.success(res.msg || t('page.visit_log.shard_del_done'));
             loadShareDbList();
             // 删掉的可能正好是当前锁定的分区，回到自动模式免得查了个不存在的东西
@@ -1573,10 +1597,12 @@ function confirmDeleteShard(row: Record<string, any>) {
             }
             getList('all');
           } else {
+            confirmDia.hide();
             MessagePlugin.error(res.msg || t('page.visit_log.shard_del_fail'));
           }
         })
         .catch(() => {
+          confirmDia.hide();
           MessagePlugin.error(t('page.visit_log.shard_del_fail'));
         });
     },
@@ -1626,7 +1652,7 @@ function loadShareDbList() {
           // 下拉里显示「时间段」而不是文件名/表名：归档分区按月切，用户要找的是某段时间的日志
           const label = shardLabel(it);
           share_db_dic[it.file_name] = label;
-          const opt = { value: it.file_name, label };
+          const opt = { value: it.file_name, label, disabled: !!it.missing };
           // 后端按驱动标记当前(实时)分片：SQLite=local_log.db，MySQL=web_logs
           if (it.is_current) {
             currentName = it.file_name;
@@ -1721,6 +1747,7 @@ function getList(keyword?: string) {
           sort_forced_time: !!res.data.sort_forced_time,
           partial: !!res.data.partial,
           took_ms: res.data.took_ms || 0,
+          issues: res.data.issues || [],
         };
         pagination.total = res.data.total;
         loadAiMarks();
