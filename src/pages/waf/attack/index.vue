@@ -234,7 +234,7 @@
           </t-form-item>
           <t-form-item>
             <t-button theme="primary" :style="{ marginLeft: '8px' }" @click="getList('all')"> {{ t('common.search') }} </t-button>
-            <t-button v-if="attack_ip === '' && isFileBasedDb" theme="primary" :style="{ marginLeft: '8px' }" @click="exportDbVisible = true">
+            <t-button v-if="attack_ip === '' && isFileBasedDb" theme="primary" :style="{ marginLeft: '8px' }" @click="openExportDialog">
               {{ t('common.export') }}
             </t-button>
             <t-button type="reset" variant="base" theme="default"> {{ t('common.reset') }} </t-button>
@@ -490,7 +490,7 @@
     <t-dialog
       v-model:visible="exportDbVisible"
       :header="t('page.visit_log.export_db_file_header')"
-      width="520px"
+      width="600px"
       :confirm-on-enter="true"
       :on-close="() => (exportDbVisible = false)"
       @confirm="handelExport"
@@ -502,6 +502,7 @@
             v-model="exportForm.range"
             enable-time-picker
             clearable
+            :placeholder="t('page.visit_log.export_time_range_ph')"
             value-type="YYYY-MM-DD HH:mm:ss"
             style="width: 100%"
           />
@@ -1763,6 +1764,14 @@ function getList(keyword?: string) {
     });
 }
 
+// 打开导出弹窗：默认最近 4 小时（每次打开重算，clearable 清空仍是「全部」）。
+// 全空默认=导全部，历史分区大时一次导出几个 GB 还占满带宽
+function openExportDialog() {
+  const now = Date.now();
+  exportForm.range = [ConvertUnixToDate(now - 4 * 3600 * 1000), ConvertUnixToDate(now)];
+  exportDbVisible.value = true;
+}
+
 function handelExport() {
   if (exportForm.tiers.length === 0) {
     MessagePlugin.warning(t('page.visit_log.export_tiers'));
@@ -1776,6 +1785,14 @@ function handelExport() {
     .then((res) => {
       if (res.code === 0) {
         MessagePlugin.success(t('page.visit_log.export_started'));
+      } else if (res.code === -7) {
+        // 导出被 export_download 配置关闭：给出「如何开启」指引而不是一句报错
+        DialogPlugin({
+          theme: 'warning',
+          header: t('page.visit_log.export_disabled_title'),
+          body: t('page.visit_log.export_disabled_body'),
+          confirmBtn: t('common.confirm'),
+        });
       } else {
         MessagePlugin.error(res.msg || t('page.visit_log.export_db_file_header'));
       }
