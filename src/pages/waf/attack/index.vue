@@ -267,17 +267,27 @@
           </template>
         </t-alert>
 
-        <!-- 分区登记还在、存储却不在了（或文件里一行都没有）：说清楚是哪个，给出处理入口 -->
+        <!-- 分区登记还在、存储却不在了（或文件里一行都没有）：说清楚是哪个，给出处理入口；
+             缺失分区一多整屏都是告警，超过 5 条默认折叠成一行概括，要看再展开 -->
         <t-alert v-if="queryMeta.issues && queryMeta.issues.length > 0" theme="warning" style="margin-bottom: 12px">
           <template #message>
-            <div>{{ t('page.visit_log.shard_issue_title') }}</div>
-            <div v-for="iss in queryMeta.issues" :key="iss.name" :title="iss.name" style="margin-top: 2px">
-              {{ shardTitle(iss.name) }}：{{
-                iss.kind === 'missing'
-                  ? t('page.visit_log.shard_issue_missing', { n: iss.registered })
-                  : t('page.visit_log.shard_issue_empty', { n: iss.registered })
-              }}
-            </div>
+            <template v-if="queryMeta.issues.length > 5 && !issExpanded">
+              {{ t('page.visit_log.shard_issue_collapsed', { n: queryMeta.issues.length }) }}
+              <a class="t-button-link" @click="issExpanded = true">{{ t('page.visit_log.shard_issue_expand') }}</a>
+            </template>
+            <template v-else>
+              <div>{{ t('page.visit_log.shard_issue_title') }}</div>
+              <div v-for="iss in queryMeta.issues" :key="iss.name" :title="iss.name" style="margin-top: 2px">
+                {{ shardTitle(iss.name) }}：{{
+                  iss.kind === 'missing'
+                    ? t('page.visit_log.shard_issue_missing', { n: iss.registered })
+                    : t('page.visit_log.shard_issue_empty', { n: iss.registered })
+                }}
+              </div>
+              <a v-if="queryMeta.issues.length > 5" class="t-button-link" @click="issExpanded = false">
+                {{ t('page.visit_log.shard_cover_fold') }}
+              </a>
+            </template>
             <a v-if="attack_ip === ''" class="t-button-link" @click="openShardManage">{{
               t('page.visit_log.shard_issue_manage')
             }}</a>
@@ -778,6 +788,7 @@ const queryMeta = ref<Record<string, any>>({
 });
 const shardGroups = ref<Array<{ label: string; options: Array<{ value: string; label: string; disabled?: boolean }> }>>([]);
 const covExpanded = ref(false);
+const issExpanded = ref(false);
 const shardManageVisible = ref(false);
 const shardRows = ref<Record<string, any>[]>([]);
 const quickRange = ref('30');
