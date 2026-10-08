@@ -132,7 +132,9 @@
     <!-- AI 参数设置（与规则编排页共用同一个弹窗组件） -->
     <gpt-config-dialog v-model:visible="gptConfigVisible" @saved="onGptConfigSaved" />
 
-    <t-sticky-tool :style="{ position: 'fixed', right: '20px', overflow: 'hidden', height: '70px' }" @click="openChat">
+    <!-- z-index：t-sticky-tool 自身没有层级，会被表格的固定列（position:relative + 背景）
+         压在下面，右下角点不到。给个明确层级，仍低于 drawer/dialog(2500+)。 -->
+    <t-sticky-tool :style="{ position: 'fixed', right: '20px', overflow: 'hidden', height: '70px', zIndex: 100 }" @click="openChat">
       <t-sticky-item :label="t('page.gpt.assistant')" :icon="renderChatIcon" />
     </t-sticky-tool>
   </div>
