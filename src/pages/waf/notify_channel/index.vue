@@ -138,7 +138,7 @@
               <div style="font-size: 12px; color: #666">
                 <div>
                   1. 访问
-                  <a href="https://sct.ftqq.com/" target="_blank" style="color: #0052d9">Server酱官网</a> 并使用微信扫码登录
+                  <a href="https://sct.ftqq.com/" target="_blank" rel="noopener noreferrer" style="color: #0052d9">Server酱官网</a> 并使用微信扫码登录
                 </div>
                 <div>2. 在控制台页面复制您的SendKey</div>
                 <div>3. 在"消息通道"页面配置接收通知的平台（微信、企业微信、钉钉等）</div>
@@ -334,7 +334,7 @@
               <div style="font-size: 12px; color: #666">
                 <div>
                   1. 访问
-                  <a href="https://sct.ftqq.com/" target="_blank" style="color: #0052d9">Server酱官网</a> 并使用微信扫码登录
+                  <a href="https://sct.ftqq.com/" target="_blank" rel="noopener noreferrer" style="color: #0052d9">Server酱官网</a> 并使用微信扫码登录
                 </div>
                 <div>2. 在控制台页面复制您的SendKey</div>
                 <div>3. 在"消息通道"页面配置接收通知的平台（微信、企业微信、钉钉等）</div>

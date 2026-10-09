@@ -817,7 +817,7 @@ function formatExpireTime(timestamp: number) {
 }
 
 function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/FirewallIPBlock.html`);
+  window.open(`${getOnlineUrl()}/guide/FirewallIPBlock.html`, '_blank', 'noopener,noreferrer');
 }
 
 onMounted(() => {

@@ -494,7 +494,7 @@ function selectIPHeader(headerValue: string) {
 
 // 打开视频教程
 function openVideoTutorial() {
-  window.open('https://www.bilibili.com/video/BV1pn8Ez2ELQ/', '_blank');
+  window.open('https://www.bilibili.com/video/BV1pn8Ez2ELQ/', '_blank', 'noopener,noreferrer');
 }
 
 function handelToAi() {

@@ -310,7 +310,7 @@ function handleAnnouncementLink(item: Record<string, any>) {
     if (item.link.startsWith('/')) {
       router.push(item.link);
     } else {
-      window.open(item.link, '_blank');
+      window.open(item.link, '_blank', 'noopener,noreferrer');
     }
   }
 }

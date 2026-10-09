@@ -64,7 +64,7 @@
     <footer class="copyright">
       Copyright @ 2022-{{ new Date().getFullYear() }} SamWaf. All Rights Reserved
       <t-link theme="primary" @click="handleJumpOnlineUrl">{{ t('login.login_has_question') }}</t-link>
-      <a href="https://doc.samwaf.com" target="_blank">{{ t('login.login_online_document') }}</a>
+      <a href="https://doc.samwaf.com" target="_blank" rel="noopener noreferrer">{{ t('login.login_online_document') }}</a>
     </footer>
   </div>
 </template>
@@ -155,7 +155,7 @@ function onChangePwdSuccess() {
 }
 
 function handleJumpOnlineUrl() {
-  window.open(getOnlineUrl());
+  window.open(getOnlineUrl(), '_blank', 'noopener,noreferrer');
 }
 </script>
 

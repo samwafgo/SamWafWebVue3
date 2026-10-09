@@ -370,7 +370,7 @@
     >
       <template #header>
         {{ t('common.new') }}
-        <t-link theme="primary" :href="hostAddUrl" target="_blank">
+        <t-link theme="primary" :href="hostAddUrl" target="_blank" rel="noopener noreferrer">
           <template #prefix-icon><link-icon /></template>
           {{ t('common.online_document') }}
         </t-link>

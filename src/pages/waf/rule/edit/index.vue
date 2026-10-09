@@ -893,7 +893,7 @@ function onRuleActionSkipsChange(val: any) {
 }
 
 function handleJumpOnlineUrl() {
-  window.open(`${getOnlineUrl()}/guide/Rule.html#_1-脚本编辑`);
+  window.open(`${getOnlineUrl()}/guide/Rule.html#_1-脚本编辑`, '_blank', 'noopener,noreferrer');
 }
 
 // 跳转到攻击日志（用于从日志创建规则）

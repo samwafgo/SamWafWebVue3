@@ -81,6 +81,7 @@
           underline
           href="https://doc.samwaf.com/quickstart/Update.html"
           target="_blank"
+          rel="noopener noreferrer"
           >{{ t('topNav.update.container_doc_link') }}</t-link
         >
         <t-button
@@ -125,7 +126,7 @@ docker compose up -d</pre
           <div v-html="compiledMarkdown"></div>
         </div>
         <div>
-          <t-link theme="primary" underline href="https://doc.samwaf.com/quickstart/Update.html" target="_blank">{{
+          <t-link theme="primary" underline href="https://doc.samwaf.com/quickstart/Update.html" target="_blank" rel="noopener noreferrer">{{
             t('topNav.update.more_label')
           }}</t-link>
         </div>
@@ -302,7 +303,7 @@ async function onUserAction(data: { value?: string | number }) {
 }
 
 function navToHelper() {
-  window.open(getOnlineUrl());
+  window.open(getOnlineUrl(), '_blank', 'noopener,noreferrer');
 }
 
 function sendMail() {
