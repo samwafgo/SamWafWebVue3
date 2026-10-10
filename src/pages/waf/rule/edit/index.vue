@@ -859,6 +859,10 @@ function setRuleContentByMode() {
     case 'body':
       bean = 'BODY';
       break;
+    // 攻击详情页的「请求 Form」块：日志里单独存 POST_FORM，规则引擎的事实对象同名可引用
+    case 'post_form':
+      bean = 'POST_FORM';
+      break;
   }
   // fromLogContentStr 来自攻击日志，是攻击者可控的原文，拼进规则前必须转义（真正的防线在后端，这里是第一道）
   const safeContent = escapeGrlString(fromLogContentStr.value);

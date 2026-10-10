@@ -746,10 +746,14 @@ const searchForm = ref<FormInstanceFunctions>();
 
 const dateControl = reactive({
   presets: {
-    最近300天: [`${ConvertUnixToDate(Date.now() - 86400000 * 299).slice(0, 10)} 00:00:00`, `${NowDate} 23:59:59`],
-    最近7天: [`${ConvertUnixToDate(Date.now() - 86400000 * 6).slice(0, 10)} 00:00:00`, `${NowDate} 23:59:59`],
-    最近3天: [`${ConvertUnixToDate(Date.now() - 86400000 * 2).slice(0, 10)} 00:00:00`, `${NowDate} 23:59:59`],
-    今天: [`${NowDate} 00:00:00`, `${NowDate} 23:59:59`],
+    [t('page.visit_log.date_range_last_300_days')]: [`${ConvertUnixToDate(Date.now() - 86400000 * 299).slice(0, 10)} 00:00:00`, `${NowDate} 23:59:59`],
+    [t('page.visit_log.date_range_last_90_days')]: [`${ConvertUnixToDate(Date.now() - 86400000 * 89).slice(0, 10)} 00:00:00`, `${NowDate} 23:59:59`],
+    [t('page.visit_log.date_range_last_60_days')]: [`${ConvertUnixToDate(Date.now() - 86400000 * 59).slice(0, 10)} 00:00:00`, `${NowDate} 23:59:59`],
+    [t('page.visit_log.date_range_last_30_days')]: [`${ConvertUnixToDate(Date.now() - 86400000 * 29).slice(0, 10)} 00:00:00`, `${NowDate} 23:59:59`],
+    [t('page.visit_log.date_range_last_15_days')]: [`${ConvertUnixToDate(Date.now() - 86400000 * 14).slice(0, 10)} 00:00:00`, `${NowDate} 23:59:59`],
+    [t('page.visit_log.date_range_last_7_days')]: [`${ConvertUnixToDate(Date.now() - 86400000 * 6).slice(0, 10)} 00:00:00`, `${NowDate} 23:59:59`],
+    [t('page.visit_log.date_range_last_3_days')]: [`${ConvertUnixToDate(Date.now() - 86400000 * 2).slice(0, 10)} 00:00:00`, `${NowDate} 23:59:59`],
+    [t('page.visit_log.date_range_today')]: [`${NowDate} 00:00:00`, `${NowDate} 23:59:59`],
   },
   range1: [`${NowDate} 00:00:00`, `${NowDate} 23:59:59`],
 });
