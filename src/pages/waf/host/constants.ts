@@ -112,10 +112,14 @@ export const INITIAL_CACHE = {
 // 网站密码访问的会话时效配置初始化数据。
 // 这三个默认值必须与后端 model.DecodeHttpAuthConfig 的空值兜底逐条一致：
 // 1440 分钟(24小时) + 不启用空闲超时 + 绑定登录IP，也就是加这套配置之前的既有行为。
+// 后三个是按路径开启的默认：整站(等价现状)、空清单、不选免密IP组。
 export const INITIAL_HTTP_AUTH = {
   session_ttl: "1440",
   idle_timeout: "0",
-  bind_ip: "1"
+  bind_ip: "1",
+  path_scope: "all",
+  paths: "",
+  bypass_ip_group: ""
 };
 
 // 静态站点安全响应头默认值（留空 header_value 则该项使用系统内置默认值）
