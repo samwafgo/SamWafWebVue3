@@ -246,6 +246,8 @@
       </t-row>
 
       <div class="table-container">
+        <t-alert v-if="isUuidLookup" theme="info" style="margin-bottom: 12px"
+                 :message="t('page.visit_log.uuid_filters_tip')" />
         <!-- 查不到老数据时，最先该看的就是保留期：直接摆在列表上方，点一下就能去改 -->
         <div style="margin-bottom: 8px; color: rgba(0, 0, 0, 0.6); font-size: 12px">
           {{
@@ -1734,23 +1736,25 @@ function getList(keyword?: string) {
   if (keyword !== undefined && keyword === 'all') {
     pagination.current = 1;
   }
-  searchformData.value.unix_add_time_begin = ConvertStringToUnix(dateControl.range1[0]).toString();
-  searchformData.value.unix_add_time_end = ConvertStringToUnix(dateControl.range1[1]).toString();
-
-  const sortDescending = sorts.descending ? 'desc' : 'asc';
-
-  dataLoading.value = true;
-  attacklogVisitListApi({
+  const requestData: Record<string, any> = {
+    ...getFilteredSearchData(),
     pageSize: pagination.pageSize,
     pageIndex: pagination.current,
     sort_by: sorts.sortBy,
-    sort_descending: sortDescending,
+    sort_descending: sorts.descending ? 'desc' : 'asc',
     filter_by: filters.filter_by,
     filter_value: filters.filter_value,
     unix_add_time_begin: ConvertStringToUnix(dateControl.range1[0]).toString(),
     unix_add_time_end: ConvertStringToUnix(dateControl.range1[1]).toString(),
-    ...getFilteredSearchData(),
-  })
+  };
+  if (requestData.req_uuid) {
+    requestData.current_db_name = 'auto';
+    delete requestData.unix_add_time_begin;
+    delete requestData.unix_add_time_end;
+  }
+
+  dataLoading.value = true;
+  attacklogVisitListApi(requestData)
     .then((res) => {
       if (res.code === 0) {
         data.value = res.data.list ?? [];

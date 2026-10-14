@@ -396,8 +396,16 @@
       :class="{ 'host-form-dialog-fullscreen': hostFormFullscreen }"
     >
       <template #header>
-        {{ t('common.edit') }}
-        <span v-if="editHostLabel" class="dialog-header-host">{{ editHostLabel }}</span>
+        <div>
+          {{ t('common.edit') }}
+          <span v-if="editHostLabel" class="dialog-header-host">{{ editHostLabel }}</span>
+          <div v-if="formEditData.code" class="dialog-header-code">
+            <span>Host Code: {{ formEditData.code }}</span>
+            <t-button size="small" variant="text" :title="t('common.copy')" :aria-label="t('common.copy')" @click="copyHostCode">
+              <file-copy-icon style="font-size: 14px; margin-right: 0" />
+            </t-button>
+          </div>
+        </div>
       </template>
       <host-form
         :value="formEditData"
@@ -598,6 +606,7 @@ import { useI18n } from 'vue-i18n';
 import { MessagePlugin, LoadingPlugin, type TableProps, type PageInfo } from 'tdesign-vue-next';
 import {
   LinkIcon,
+  FileCopyIcon,
   ViewListIcon,
   SecuredIcon,
   ErrorCircleIcon,
@@ -852,6 +861,36 @@ const editHostLabel = computed(() => {
   const baseLabel = `${data.host}:${data.port}`;
   return bracketContent.length > 0 ? `${baseLabel}(${bracketContent.join(',')})` : baseLabel;
 });
+
+async function copyHostCode(event: MouseEvent) {
+  const container = (event.currentTarget as HTMLElement).parentElement;
+  const code = formEditData.value.code;
+  if (!code) return;
+  const done = () => MessagePlugin.success(t('page.visit_log.detail.copied'));
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(code);
+      done();
+      return;
+    } catch {
+      // HTTP 管理端或剪贴板权限受限时使用兼容方式。
+    }
+  }
+  const input = document.createElement('textarea');
+  input.value = code;
+  input.style.position = 'fixed';
+  input.style.opacity = '0';
+  (container || document.body).appendChild(input);
+  try {
+    input.select();
+    if (document.execCommand('copy')) done();
+    else MessagePlugin.error(t('page.visit_log.detail.copy_failed'));
+  } catch {
+    MessagePlugin.error(t('page.visit_log.detail.copy_failed'));
+  } finally {
+    input.remove();
+  }
+}
 
 /** 批量复制源站点选项（排除全局网站） */
 const sourceHostOptions = computed(() =>
@@ -2828,6 +2867,27 @@ onMounted(() => {
   font-weight: normal;
   color: var(--td-text-color-secondary);
   word-break: break-all;
+}
+
+.dialog-header-code {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: normal;
+  color: var(--td-text-color-secondary);
+}
+
+.dialog-header-code span {
+  user-select: text;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.dialog-header-code .t-button {
+  color: inherit;
+  flex-shrink: 0;
 }
 
 .target-hosts-container {

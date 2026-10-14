@@ -94,6 +94,7 @@
               <t-radio-button value="code">{{ t('page.blocking_page.editor_mode.code') }}</t-radio-button>
               <t-radio-button value="preview">{{ t('page.blocking_page.editor_mode.preview') }}</t-radio-button>
             </t-radio-group>
+            <div class="priority-tip">{{ t('page.blocking_page.template_variables') }}</div>
             <t-textarea
               v-show="previewModeAdd === 'code'"
               v-model="formData.response_content"
@@ -171,6 +172,7 @@
               <t-radio-button value="code">{{ t('page.blocking_page.editor_mode.code') }}</t-radio-button>
               <t-radio-button value="preview">{{ t('page.blocking_page.editor_mode.preview') }}</t-radio-button>
             </t-radio-group>
+            <div class="priority-tip">{{ t('page.blocking_page.template_variables') }}</div>
             <t-textarea
               v-show="previewModeEdit === 'code'"
               v-model="formEditData.response_content"
@@ -214,6 +216,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
+import DOMPurify from 'dompurify';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin, type FormProps, type PageInfo, type TableProps } from 'tdesign-vue-next';
 import { getOnlineUrl } from '@/utils/usuallytool';
@@ -242,6 +245,7 @@ const DEFAULT_HEADER_LIST = [{ name: 'Content-Type', value: 'text/html' }];
 // 预览时用来替换模板占位符的演示数据（后端模板分隔符是 [[ ]]，变量形如 [[.SAMWAF_REQ_UUID]]）
 const PREVIEW_PLACEHOLDER_VALUES: Record<string, string> = {
   SAMWAF_REQ_UUID: 'PREVIEW-0000-0000-0000',
+  SAMWAF_IP: '203.0.113.10',
   SAMWAF_BACKEND_STATUS: '403 Forbidden',
   SAMWAF_BACKEND_CODE: '403',
   SAMWAF_BACKEND_BODY: '{"code":403,"message":"forbidden"}',
@@ -328,9 +332,9 @@ function buildPreviewHtml(content: string) {
     ...PREVIEW_PLACEHOLDER_VALUES,
     SAMWAF_BLOCK_INFO: t('page.blocking_page.preview_demo_block_info'),
   };
-  return content.replace(/\[\[\s*\.?([A-Za-z0-9_]+)\s*\]\]/g, (match, key: string) =>
+  return DOMPurify.sanitize(content.replace(/\[\[\s*\.([A-Za-z0-9_]+)\s*\]\]/g, (match, key: string) =>
     Object.prototype.hasOwnProperty.call(demo, key) ? demo[key] : match,
-  );
+  ));
 }
 
 const previewHtmlAdd = computed(() => buildPreviewHtml(formData.value.response_content));
