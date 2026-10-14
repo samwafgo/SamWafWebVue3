@@ -134,3 +134,15 @@ export function getPortOverview(params?: Record<string, any>) {
     params,
   });
 }
+
+/** 健康检测手动测试：超时按探测时长单独给定，signal 供弹窗关闭时取消 */
+export function testHostHealth(data: Record<string, any>, timeout: number, signal?: AbortSignal) {
+  return request({
+    url: 'wafhost/host/health/test',
+    method: 'post',
+    data,
+    timeout,
+    signal,
+    background: true,
+  });
+}

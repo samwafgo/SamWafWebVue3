@@ -236,6 +236,8 @@ instance.interceptors.response.use(
     return data as any;
   },
   (err) => {
+    // 调用方主动取消（如弹窗关闭中止健康测试）：不是故障，直接透传不弹任何提示
+    if (axios.isCancel(err)) return Promise.reject(err);
     // 超时：后端“可达但响应过慢”（或网络慢），并非连不上/跨域。axios 超时表现为 code=ECONNABORTED 且无 response，
     // 若不单独处理会落入下面的「无法连接后端(CORS)」分支造成误导。这里单独提示（含超时秒数）并提供“重试”。
     const isTimeout =

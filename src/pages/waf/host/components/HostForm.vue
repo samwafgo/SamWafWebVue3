@@ -760,7 +760,11 @@
               <heart-icon style="margin-right: 4px; color: #00a870" />
               {{ t('page.host.tab_health_check') }}
             </template>
-            <healthy-config :healthy-config="healthyConfigData" @update="(val: any) => (healthyConfigData = val)" />
+            <healthy-config :healthy-config="healthyConfigData" @update="(val: any) => (healthyConfigData = val)"
+                            @test="testHealth" :test-loading="healthTestLoading" :test-results="healthTestResults"
+                            :test-total="healthTestTotal" :test-stale="healthTestStale" :test-error="healthTestError"
+                            :test-expected-codes="healthTestExpectedCodes"
+                            :load-balance-enabled="String(formData.is_enable_load_balance) === '1'" />
           </t-tab-panel>
 
           <t-tab-panel :value="7">
@@ -927,7 +931,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin, type FormProps } from 'tdesign-vue-next';
@@ -999,7 +1003,7 @@ import {
 } from '../constants';
 import { sslConfigListApi, sslConfigAddApi, sslConfigEditApi } from '@/apis/sslconfig';
 import { wafIPGroupOptionsApi } from '@/apis/ipgroup';
-import { checkHostPorts } from '@/apis/host';
+import { checkHostPorts, testHostHealth } from '@/apis/host';
 import { getOrDefault } from '@/utils/usuallytool';
 import { get_detail_by_item_api, edit_system_config_by_item_api } from '@/apis/systemconfig';
 import { wafCDNProviderInfoApi } from '@/apis/cdnip';
@@ -1382,6 +1386,148 @@ const hostDefenseData = ref<Record<string, string>>({
 });
 
 const healthyConfigData = ref<Record<string, any>>({ ...INITIAL_HEALTHY });
+
+/* ===== 健康检测手动测试（与定时任务共用后端单次探测，不保存不改运行状态） ===== */
+const healthTestLoading = ref(false);
+const healthTestResults = ref<Record<string, any>[]>([]);
+const healthTestTotal = ref(0);
+const healthTestStale = ref(false);
+const healthTestError = ref('');
+const healthTestExpectedCodes = ref('');
+const healthTestGeneration = ref(0);
+const healthTestController = ref<AbortController | null>(null);
+const healthTestSnapshot = ref('');
+
+// 触发测试时的表单快照：健康配置 + 回源七字段任一变化即视为结果过期
+const healthTestConfigKey = computed(() => {
+  const { code, host, remote_host, remote_ip, remote_port, is_enable_load_balance, is_trans_back_domain } = formData.value;
+  return JSON.stringify({ code, host, remote_host, remote_ip, remote_port, is_enable_load_balance, is_trans_back_domain, healthy: healthyConfigData.value });
+});
+
+watch(healthTestConfigKey, () => {
+  if (healthTestSnapshot.value && healthTestSnapshot.value !== healthTestConfigKey.value) {
+    cancelHealthTest();
+    healthTestStale.value = true;
+  }
+});
+
+// 切换编辑站点（父组件替换 value 对象）时清空旧结果，防止上一站的结果串到下一站
+watch(
+  () => props.value,
+  () => resetHealthTest(),
+);
+
+function cancelHealthTest() {
+  healthTestGeneration.value += 1;
+  if (healthTestController.value) healthTestController.value.abort();
+  healthTestController.value = null;
+  healthTestLoading.value = false;
+}
+
+function resetHealthTest() {
+  cancelHealthTest();
+  healthTestResults.value = [];
+  healthTestTotal.value = 0;
+  healthTestStale.value = false;
+  healthTestError.value = '';
+  healthTestExpectedCodes.value = '';
+  healthTestSnapshot.value = '';
+}
+
+async function testHealth(config: Record<string, any>) {
+  if (healthTestLoading.value || !props.dialogVisible) return;
+  resetHealthTest();
+  const initialGeneration = healthTestGeneration.value;
+  healthyConfigData.value = JSON.parse(JSON.stringify(config));
+  await nextTick();
+  if (initialGeneration !== healthTestGeneration.value || healthTestLoading.value || !props.dialogVisible) return;
+  const healthy = {
+    is_enable_healthy: parseInt(config.is_enable_healthy, 10),
+    fail_count: parseInt(config.fail_count, 10),
+    success_count: parseInt(config.success_count, 10),
+    response_time: parseInt(config.response_time, 10),
+    check_method: config.check_method,
+    check_path: config.check_path,
+    expected_codes: config.expected_codes,
+  };
+  const integerInRange = (value: any, min: number, max: number) =>
+    /^\d+$/.test(String(value)) && Number.isInteger(Number(value)) && Number(value) >= min && Number(value) <= max;
+  if (!integerInRange(config.is_enable_healthy, 0, 1)
+    || !integerInRange(config.fail_count, 1, 10) || !integerInRange(config.success_count, 1, 10)
+    || !integerInRange(config.response_time, 1, 120) || !['GET', 'HEAD'].includes(healthy.check_method)) {
+    healthTestError.value = t('page.host.health_check.test_invalid_config');
+    return;
+  }
+  const origin = formData.value;
+  const loadBalance = String(origin.is_enable_load_balance) === '1';
+  if (loadBalance && !origin.code) {
+    healthTestError.value = t('page.host.health_check.test_save_loadbalance');
+    return;
+  }
+  if (!origin.host || !/^https?:\/\/[^\s]+$/.test(origin.remote_host || '')
+    || (!loadBalance && !integerInRange(origin.remote_port, 1, 65535))) {
+    healthTestError.value = t('page.host.health_check.test_invalid_origin');
+    return;
+  }
+  const payload = {
+    code: origin.code || '', host: origin.host, remote_host: origin.remote_host,
+    remote_ip: origin.remote_ip || '', remote_port: parseInt(origin.remote_port, 10) || 0,
+    is_enable_load_balance: parseInt(origin.is_enable_load_balance, 10),
+    is_trans_back_domain: parseInt(origin.is_trans_back_domain, 10),
+    healthy_json: JSON.stringify(healthy), limit: 5,
+  };
+  resetHealthTest();
+  const generation = healthTestGeneration.value;
+  const snapshot = healthTestConfigKey.value;
+  healthTestSnapshot.value = snapshot;
+  healthTestExpectedCodes.value = healthy.expected_codes;
+  healthTestLoading.value = true;
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  healthTestController.value = controller;
+  // 本轮是否仍有效：世代没被取消/重置、弹窗仍开着、配置快照没变
+  const isCurrent = () => generation === healthTestGeneration.value && props.dialogVisible
+    && snapshot === healthTestConfigKey.value;
+  try {
+    let offset = 0;
+    while (isCurrent()) {
+      const response: any = await testHostHealth({ ...payload, offset },
+        healthy.response_time * 1000 + 10000, controller ? controller.signal : undefined);
+      if (!isCurrent()) return;
+      if (response.code !== 0) {
+        healthTestError.value = response.msg || t('page.host.health_check.test_request_failed');
+        return;
+      }
+      const batch = response.data;
+      if (!batch || !Array.isArray(batch.results) || !Number.isInteger(batch.total) || batch.total < 0
+        || !Number.isInteger(batch.next_offset) || batch.results.length > 5
+        || batch.results.some((row: any) => !row || !['passed', 'failed', 'skipped'].includes(row.outcome))) {
+        throw new Error(t('page.host.health_check.test_invalid_response'));
+      }
+      healthTestResults.value = healthTestResults.value.concat(batch.results);
+      healthTestTotal.value = batch.total;
+      if (batch.next_offset === -1) break;
+      if (!batch.results.length || batch.next_offset !== offset + batch.results.length
+        || batch.next_offset >= batch.total) {
+        throw new Error(t('page.host.health_check.test_invalid_response'));
+      }
+      offset = batch.next_offset;
+    }
+  } catch (error: any) {
+    if (isCurrent()) {
+      healthTestError.value = error.message || t('page.host.health_check.test_request_failed');
+    }
+  } finally {
+    if (isCurrent()) {
+      healthTestLoading.value = false;
+      healthTestController.value = null;
+    }
+  }
+}
+
+onBeforeUnmount(() => {
+  cancelHealthTest();
+});
+
 const captchaConfigData = ref<Record<string, any>>({ ...INITIAL_CAPTCHA });
 const antiLeechConfigData = ref<Record<string, any>>({ ...INITIAL_ANTILEECH });
 const cacheConfigData = ref<Record<string, any>>({ ...INITIAL_CACHE });
@@ -2434,6 +2580,8 @@ getHttpsRedirectConfig();
 watch(
   () => props.dialogVisible,
   (val) => {
+    // 打开/关闭都清空健康检测手动测试结果并取消在途请求
+    resetHealthTest();
     if (val) {
       getSslFolderList();
       // 免密IP组同理：IP组页面新建的组，这里也要能看到；失败静默不影响其它配置
