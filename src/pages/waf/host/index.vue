@@ -1701,7 +1701,7 @@ function handleClickCopy(e: { row: Record<string, any> }) {
     return;
   }
   addFormVisible.value = true;
-  getHostDetail({ CODE: code })
+  getHostDetail({ code: code })
     .then((res) => {
       if (res.code === 0) {
         formData.value = {
@@ -1821,7 +1821,7 @@ function handleClickSSLApply(e: { row: Record<string, any> }) {
 function onConfirmDelete() {
   confirmVisible.value = false;
   const { code } = data.value[deleteIdx.value];
-  delHost({ CODE: code })
+  delHost({ code: code })
     .then((res) => {
       if (res.code === 0) {
         loadHostGroups();
@@ -1847,7 +1847,7 @@ function resetIdx() {
 }
 
 function getDetail(id: string) {
-  getHostDetail({ CODE: id })
+  getHostDetail({ code: id })
     .then((res) => {
       if (res.code === 0) {
         formEditData.value = { ...res.data };
@@ -1937,8 +1937,8 @@ function onGuardStatusConfirm() {
   }
   const { code, guard_status } = data.value[guardStatusIdx.value];
   changeGuardStatus({
-    CODE: code,
-    GUARD_STATUS: guard_status === 1 ? 0 : 1,
+    code: code,
+    guard_status: guard_status === 1 ? 0 : 1,
   })
     .then((res) => {
       if (res.code === 0) {
@@ -1965,8 +1965,8 @@ function onStartStatusConfirm() {
   startConfirmVisible.value = false;
   const { code, start_status } = data.value[startStatusIdx.value];
   changeStartStatus({
-    CODE: code,
-    START_STATUS: start_status === 1 ? 0 : 1,
+    code: code,
+    start_status: start_status === 1 ? 0 : 1,
   })
     .then((res) => {
       if (res.code === 0) {

@@ -304,7 +304,7 @@ function handleClickDelete(e: { rowIndex: number }) {
 function onConfirmDelete() {
   confirmVisible.value = false;
   const { rule_code } = data.value[deleteIdx.value];
-  wafRuleDelApi({ CODE: rule_code })
+  wafRuleDelApi({ code: rule_code })
     .then((res) => {
       if (res.code === 0) {
         pagination.current = 1;
@@ -388,7 +388,7 @@ function changeRuleStatusHandle(row: Record<string, any>) {
   const currentStatus = row.rule_status === 1 ? 1 : 0;
   const newStatus = currentStatus === 1 ? 0 : 1;
 
-  changeRuleStatus({ CODE: row.rule_code, rule_status: newStatus })
+  changeRuleStatus({ code: row.rule_code, rule_status: newStatus })
     .then((res) => {
       if (res.code === 0) {
         row.rule_status = newStatus;

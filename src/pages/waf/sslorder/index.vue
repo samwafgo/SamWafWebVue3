@@ -879,7 +879,7 @@ function evalHost80(hostCode: string): Promise<boolean> {
       resolve(true);
       return;
     }
-    getHostDetail({ CODE: hostCode })
+    getHostDetail({ code: hostCode })
       .then((res) => {
         if (res.code === 0 && res.data) {
           const { port } = res.data;

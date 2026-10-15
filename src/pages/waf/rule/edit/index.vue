@@ -692,7 +692,7 @@ function loadHostList() {
 }
 
 function getDetail(id: string) {
-  wafRuleDetailApi({ CODE: id })
+  wafRuleDetailApi({ code: id })
     .then((res) => {
       if (res.code === 0) {
         formData.value = JSON.parse(res.data.rule_content_json);

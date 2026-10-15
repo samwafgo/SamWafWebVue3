@@ -737,7 +737,7 @@ function beforeSendAi() {
   httpAiMask.value = '';
   httpAiMaskVisible.value = false;
   getHeaderCopyDetail({
-    REQ_UUID: detail_req.req_uuid,
+    req_uuid: detail_req.req_uuid,
     current_db_name: detail_req.current_db,
     output_format: 'raw',
   })
@@ -758,7 +758,7 @@ function loadHttpCopyMask() {
   httpCopyMask.value = '';
   httpCopyMaskVisible.value = false;
   getHeaderCopyDetail({
-    REQ_UUID: detail_req.req_uuid,
+    req_uuid: detail_req.req_uuid,
     current_db_name: detail_req.current_db,
     output_format: 'curl',
   })
@@ -804,7 +804,7 @@ function getDetail(uuidAndName?: string) {
     res_body: false,
   };
   geWebLogDetail({
-    REQ_UUID: id,
+    req_uuid: id,
     current_db_name: currentDbName,
   })
     .then((res) => {
