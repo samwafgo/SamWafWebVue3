@@ -4,6 +4,7 @@
       <t-row justify="space-between">
         <div class="left-operation-container">
           <t-button @click="handleAdd">{{ t('page.blocking_page.button_add_blocking_page') }}</t-button>
+          <t-button variant="outline" @click="openUnmatchedDialog">{{ t('page.blocking_page.unmatched.title') }}</t-button>
         </div>
         <div class="right-operation-container">
           <t-form :data="searchformData" layout="inline" colon :style="{ marginBottom: '8px' }">
@@ -205,6 +206,51 @@
     </t-dialog>
 
     <t-dialog
+      v-model:visible="unmatchedVisible"
+      :header="t('page.blocking_page.unmatched.title')"
+      :width="780"
+      :footer="false"
+      :close-on-overlay-click="!unmatchedSaving"
+      :close-on-esc-keydown="!unmatchedSaving"
+      :close-btn="!unmatchedSaving"
+    >
+      <p>{{ t('page.blocking_page.unmatched.description') }}</p>
+      <div style="width: 100%">
+        <t-radio-group v-model="unmatchedActiveTab" variant="default-filled" size="small" style="margin-bottom: 8px">
+          <t-radio-button value="edit">{{ t('page.blocking_page.editor_mode.code') }}</t-radio-button>
+          <t-radio-button value="preview">{{ t('page.blocking_page.editor_mode.preview') }}</t-radio-button>
+        </t-radio-group>
+        <div class="priority-tip">{{ t('page.blocking_page.unmatched.builtin_tip') }}</div>
+        <div class="priority-tip">{{ t('page.blocking_page.unmatched.variable_tip') }}</div>
+        <p v-if="unmatchedLoadError" role="alert">{{ t('page.blocking_page.unmatched.load_failed') }}</p>
+        <p v-else-if="builtinLoadError" class="priority-tip" role="alert">{{ t('page.blocking_page.unmatched.preview_builtin_failed') }}</p>
+        <t-textarea
+          v-show="unmatchedActiveTab === 'edit'"
+          v-model="unmatchedData.response_content"
+          :disabled="unmatchedLoading || unmatchedLoadError || unmatchedSaving"
+          :placeholder="t('page.blocking_page.unmatched.placeholder')"
+          :autosize="{ minRows: 12, maxRows: 20 }"
+        />
+        <!-- sandbox 置空：预览框内不允许执行脚本、不同源，避免模板里的 JS 在管理端被执行 -->
+        <iframe v-show="unmatchedActiveTab === 'preview'" class="unmatched-preview-frame" sandbox="" :srcdoc="unmatchedPreviewHtml"></iframe>
+      </div>
+      <div class="unmatched-actions">
+        <t-button
+          variant="outline"
+          :disabled="unmatchedLoading || unmatchedLoadError || unmatchedSaving || !builtinUnmatchedHtml"
+          @click="unmatchedData.response_content = builtinUnmatchedHtml"
+        >{{ t('page.blocking_page.unmatched.clear') }}</t-button>
+        <t-button variant="outline" :disabled="unmatchedSaving" @click="unmatchedVisible = false">{{ t('common.close') }}</t-button>
+        <t-button
+          theme="primary"
+          :loading="unmatchedSaving"
+          :disabled="!unmatchedLoaded || unmatchedLoading || unmatchedLoadError || unmatchedSaving"
+          @click="saveUnmatchedResponse"
+        >{{ t('common.confirm') }}</t-button>
+      </div>
+    </t-dialog>
+
+    <t-dialog
       v-model:visible="confirmVisible"
       :header="t('common.confirm_delete')"
       :body="confirmBody"
@@ -227,6 +273,7 @@ import {
   wafBlockingPageEditApi,
   wafBlockingPageAddApi,
   wafBlockingPageDetailApi,
+  wafBlockingPageUnmatchedBuiltinApi,
 } from '@/apis/blocking_page';
 
 const INITIAL_DATA = {
@@ -240,6 +287,14 @@ const INITIAL_DATA = {
   content_priority: 'samwaf',
 };
 
+const INITIAL_UNMATCHED_DATA = {
+  ...INITIAL_DATA,
+  id: '',
+  host_code: '',
+  blocking_type: 'not_match_website',
+  response_header: '[]',
+};
+
 const DEFAULT_HEADER_LIST = [{ name: 'Content-Type', value: 'text/html' }];
 
 // 预览时用来替换模板占位符的演示数据（后端模板分隔符是 [[ ]]，变量形如 [[.SAMWAF_REQ_UUID]]）
@@ -248,6 +303,7 @@ const PREVIEW_PLACEHOLDER_VALUES: Record<string, string> = {
   SAMWAF_IP: '203.0.113.10',
   SAMWAF_BACKEND_STATUS: '403 Forbidden',
   SAMWAF_BACKEND_CODE: '403',
+  SAMWAF_HOST: 'notfound.example.com',
   SAMWAF_BACKEND_BODY: '{"code":403,"message":"forbidden"}',
 };
 
@@ -258,6 +314,18 @@ const editFormVisible = ref(false);
 const confirmVisible = ref(false);
 const formData = ref<Record<string, any>>({ ...INITIAL_DATA });
 const formEditData = ref<Record<string, any>>({ ...INITIAL_DATA });
+
+// 未匹配网站响应专用弹窗状态
+const unmatchedVisible = ref(false);
+const unmatchedActiveTab = ref<'edit' | 'preview'>('edit');
+const unmatchedLoading = ref(false);
+const unmatchedLoaded = ref(false);
+const unmatchedLoadError = ref(false);
+const unmatchedSaving = ref(false);
+let unmatchedLoadSequence = 0;
+const builtinUnmatchedHtml = ref('');
+const builtinLoadError = ref(false);
+const unmatchedData = ref<Record<string, any>>({ ...INITIAL_UNMATCHED_DATA });
 
 const rules: FormProps['rules'] = {
   blocking_page_name: [{ required: true, message: t('common.placeholder') + t('page.blocking_page.blocking_page_name'), type: 'error' }],
@@ -340,6 +408,132 @@ function buildPreviewHtml(content: string) {
 const previewHtmlAdd = computed(() => buildPreviewHtml(formData.value.response_content));
 const previewHtmlEdit = computed(() => buildPreviewHtml(formEditData.value.response_content));
 
+const unmatchedPreviewHtml = computed(() => {
+  if (!(unmatchedData.value.response_content || '').trim()) {
+    if (!builtinUnmatchedHtml.value) return '';
+    const demo: Record<string, string> = { SAMWAF_HOST: PREVIEW_PLACEHOLDER_VALUES.SAMWAF_HOST };
+    return DOMPurify.sanitize(
+      builtinUnmatchedHtml.value.replace(/\[\[\s*\.([A-Za-z0-9_]+)\s*\]\]/g, (match, key: string) =>
+        Object.prototype.hasOwnProperty.call(demo, key) ? demo[key] : match,
+      ),
+    );
+  }
+  return buildPreviewHtml(unmatchedData.value.response_content);
+});
+
+function loadBuiltinUnmatched(sequence: number) {
+  wafBlockingPageUnmatchedBuiltinApi()
+    .then((res) => {
+      if (sequence !== unmatchedLoadSequence || !unmatchedVisible.value) return;
+      if (res.code === 0 && typeof res.data === 'string') {
+        builtinUnmatchedHtml.value = res.data;
+        // 无自定义记录时，编辑区预填内置页面，保证编辑与预览内容一致
+        if (unmatchedVisible.value && !(unmatchedData.value.response_content || '').trim()) {
+          unmatchedData.value.response_content = res.data;
+        }
+      } else {
+        builtinLoadError.value = true;
+      }
+    })
+    .catch(() => {
+      if (sequence === unmatchedLoadSequence) builtinLoadError.value = true;
+    });
+}
+
+function findGlobalHostCode(hosts: Record<string, any>[]) {
+  const marked = hosts.filter((host) => Number(host.global_host) === 1);
+  const candidates = marked.length
+    ? marked
+    : hosts.filter((host) => host.pre_host === 'global:80' || host.label === 'global:80' || host.label === 'global');
+  return candidates.length === 1 && typeof candidates[0].value === 'string' ? candidates[0].value : '';
+}
+
+async function openUnmatchedDialog() {
+  if (unmatchedSaving.value) return;
+  const sequence = ++unmatchedLoadSequence;
+  unmatchedVisible.value = true;
+  unmatchedActiveTab.value = 'edit';
+  unmatchedLoading.value = true;
+  unmatchedLoaded.value = false;
+  unmatchedLoadError.value = false;
+  builtinUnmatchedHtml.value = '';
+  builtinLoadError.value = false;
+  loadBuiltinUnmatched(sequence);
+  unmatchedData.value = {
+    ...INITIAL_UNMATCHED_DATA,
+    blocking_page_name: String(t('page.blocking_page.unmatched.title')),
+  };
+  try {
+    const hosts = await allhost();
+    if (sequence !== unmatchedLoadSequence || !unmatchedVisible.value) return;
+    if (hosts.code !== 0 || !Array.isArray(hosts.data)) throw new Error('Unable to load websites');
+    const globalHostCode = findGlobalHostCode(hosts.data);
+    if (!globalHostCode) throw new Error('Global website is unavailable');
+    unmatchedData.value.host_code = globalHostCode;
+    const res = await wafBlockingPageListApi({
+      host_code: globalHostCode,
+      blocking_type: 'not_match_website',
+      pageIndex: 1,
+      pageSize: 1,
+    });
+    if (sequence !== unmatchedLoadSequence || !unmatchedVisible.value) return;
+    if (res.code !== 0 || !res.data || !(Array.isArray(res.data.list) || (res.data.list === null && res.data.total === 0))) {
+      throw new Error('Unable to load response');
+    }
+    const record = (res.data.list || [])[0];
+    if (record) {
+      if (!record.id || record.host_code !== globalHostCode || record.blocking_type !== 'not_match_website') {
+        throw new Error('Unexpected response record');
+      }
+      const savedContent = record.response_content || '';
+      unmatchedData.value = {
+        ...unmatchedData.value,
+        ...record,
+        // 已存内容为空表示按内置页面生效；保留编辑区已有内容（内置预填或空），避免被空串覆盖
+        response_content: savedContent.trim() ? savedContent : unmatchedData.value.response_content,
+        response_header: record.response_header ?? '[]',
+      };
+    }
+    unmatchedLoaded.value = true;
+  } catch (e) {
+    if (sequence !== unmatchedLoadSequence || !unmatchedVisible.value) return;
+    unmatchedLoadError.value = true;
+  } finally {
+    if (sequence === unmatchedLoadSequence) unmatchedLoading.value = false;
+  }
+}
+
+async function saveUnmatchedResponse() {
+  if (!unmatchedLoaded.value || unmatchedLoading.value || unmatchedLoadError.value || unmatchedSaving.value || !unmatchedData.value.host_code) return;
+  unmatchedSaving.value = true;
+  const custom = (unmatchedData.value.response_content || '').trim();
+  const builtin = (builtinUnmatchedHtml.value || '').trim();
+  const payload: Record<string, any> = {
+    ...unmatchedData.value,
+    blocking_type: 'not_match_website',
+    // 与内置页面一致或为空都按内置语义保存，避免无改动保存冻结模板
+    response_content: custom && custom !== builtin ? unmatchedData.value.response_content : '',
+    response_code: '403',
+    attack_type: '',
+    content_priority: 'samwaf',
+  };
+  try {
+    const res = await (payload.id ? wafBlockingPageEditApi(payload) : wafBlockingPageAddApi(payload));
+    if (res.code !== 0) {
+      MessagePlugin.warning(res.msg || t('page.blocking_page.unmatched.save_failed'));
+      return;
+    }
+    MessagePlugin.success(res.msg);
+    unmatchedVisible.value = false;
+    pagination.current = 1;
+    getList();
+  } catch (e) {
+    MessagePlugin.warning(t('page.blocking_page.unmatched.save_failed'));
+  } finally {
+    unmatchedSaving.value = false;
+  }
+}
+
 // 空值按默认的"优先使用SamWaf自定义模版"显示
 function getContentPriorityLabel(contentPriority: string) {
   const option = contentPriorityOptions.value.find((opt) => opt.value === (contentPriority || 'samwaf'));
@@ -415,6 +609,10 @@ function rehandlePageChange(pageInfo: PageInfo) {
 }
 
 function handleClickEdit(e: { row: Record<string, any> }) {
+  if (e.row.blocking_type === 'not_match_website') {
+    openUnmatchedDialog();
+    return;
+  }
   editFormVisible.value = true;
   previewModeEdit.value = 'code';
   response_header_list.value = parseHeaders(e.row.response_header);
@@ -564,5 +762,21 @@ onMounted(() => {
   border: 1px solid var(--td-component-border);
   border-radius: var(--td-radius-default);
   background-color: #fff;
+}
+
+.unmatched-preview-frame {
+  width: 100%;
+  height: 440px;
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-default);
+  background-color: #fff;
+}
+
+.unmatched-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
 }
 </style>

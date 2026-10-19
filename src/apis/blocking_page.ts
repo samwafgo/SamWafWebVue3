@@ -44,3 +44,11 @@ export function wafBlockingPageDetailApi(params: Record<string, any>) {
     params,
   });
 }
+
+/** 拦截页面 - 未匹配网站内置页面（预览用） */
+export function wafBlockingPageUnmatchedBuiltinApi() {
+  return request({
+    url: '/wafhost/blockingpage/unmatchedbuiltin',
+    method: 'get',
+  });
+}
