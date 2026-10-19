@@ -356,8 +356,19 @@
               <t-form-item name="is_trans_back_domain" :label-width="baseLabelWidth">
                 <template #label>
                   <span>{{ t('page.host.is_trans_back_domain') }}</span>
-                  <t-tooltip :content="t('page.host.is_trans_back_domain_content')" placement="top" :overlay-style="{ width: '260px' }" :delay="200" show-arrow>
-                    <help-circle-icon class="host-form-ip-mode-help-icon" />
+                  <t-tooltip trigger="click" placement="top" :overlay-style="{ maxWidth: 'min(460px, calc(100vw - 32px))' }" show-arrow>
+                    <template #content>
+                      <div class="backend-host-help-text">
+                        <p>{{ t('page.host.is_trans_back_domain_content') }}</p>
+                        <p>{{ t('page.host.is_trans_back_domain_example') }}</p>
+                        <p>{{ t('page.host.is_trans_back_domain_example_off') }}</p>
+                        <p>{{ t('page.host.is_trans_back_domain_example_on') }}</p>
+                        <p>{{ t('page.host.is_trans_back_domain_forwarded_hint', { host: '{host}' }) }}</p>
+                      </div>
+                    </template>
+                    <t-button variant="text" size="small" shape="square" :aria-label="t('page.host.is_trans_back_domain')">
+                      <help-circle-icon />
+                    </t-button>
                   </t-tooltip>
                 </template>
                 <t-radio-group v-model="formData.is_trans_back_domain">
@@ -2699,6 +2710,13 @@ watch(
   margin-top: 4px;
 }
 
+.backend-host-help-text {
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.backend-host-help-text p {
+  margin: 0 0 4px;
+}
 .host-form-ip-mode-help-icon {
   margin-left: 6px;
   vertical-align: middle;

@@ -1,12 +1,25 @@
 <template>
   <div class="custom-headers-config">
-    <t-form-item :label="t('page.host.custom_headers.is_enable')">
-      <t-tooltip :content="t('page.host.custom_headers.is_enable_tips')" placement="top" :overlay-style="{ width: '300px' }" show-arrow>
-        <t-radio-group v-model="localConfig.is_enable_custom_headers" @change="updateParent">
-          <t-radio value="0">{{ t('common.off') }}</t-radio>
-          <t-radio value="1">{{ t('common.on') }}</t-radio>
-        </t-radio-group>
-      </t-tooltip>
+    <t-form-item>
+      <template #label>
+        <span>{{ t('page.host.custom_headers.is_enable') }}</span>
+        <t-tooltip trigger="click" placement="top" :overlay-style="{ maxWidth: 'min(460px, calc(100vw - 32px))' }" show-arrow>
+          <template #content>
+            <div class="forwarded-host-help">
+              <p>{{ t('page.host.custom_headers.is_enable_tips') }}</p>
+              <p>{{ t('page.host.custom_headers.forwarded_host_guide', { host: '{host}' }) }}</p>
+              <p>{{ t('page.host.custom_headers.forwarded_host_relation', { host: '{host}' }) }}</p>
+            </div>
+          </template>
+          <t-button variant="text" size="small" shape="square" :aria-label="t('page.host.custom_headers.show_help')">
+            <help-circle-icon />
+          </t-button>
+        </t-tooltip>
+      </template>
+      <t-radio-group v-model="localConfig.is_enable_custom_headers" @change="updateParent">
+        <t-radio value="0">{{ t('common.off') }}</t-radio>
+        <t-radio value="1">{{ t('common.on') }}</t-radio>
+      </t-radio-group>
     </t-form-item>
 
     <!-- 使用说明 -->
@@ -46,7 +59,8 @@
               <li>{{ t('page.host.custom_headers.example_1') }}</li>
               <li>{{ t('page.host.custom_headers.example_2') }}</li>
               <li>{{ t('page.host.custom_headers.example_3') }}</li>
-              <li>{{ t('page.host.custom_headers.example_4') }}</li>
+              <li>{{ t('page.host.custom_headers.example_4', { scheme: '{scheme}', host: '{host}', request_uri: '{request_uri}' }) }}</li>
+              <li>{{ t('page.host.custom_headers.example_5', { host: '{host}' }) }}</li>
             </ul>
           </div>
 
@@ -143,7 +157,7 @@
 import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin } from 'tdesign-vue-next';
-import { InfoCircleIcon, AddCircleIcon, AddIcon, DeleteIcon } from 'tdesign-icons-vue-next';
+import { InfoCircleIcon, AddCircleIcon, AddIcon, DeleteIcon, HelpCircleIcon } from 'tdesign-icons-vue-next';
 
 const props = defineProps<{ customHeadersConfig: Record<string, any> }>();
 const emit = defineEmits<{ (e: 'update', config: Record<string, any>): void }>();
@@ -247,6 +261,16 @@ function addPresetHeader(type: 'client_ip' | 'forwarded_for' | 'real_ip' | 'cust
 </script>
 
 <style scoped>
+.forwarded-host-help {
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.forwarded-host-help p {
+  margin: 0;
+}
+.forwarded-host-help p + p {
+  margin-top: 8px;
+}
 .variable-help {
   padding: 16px;
   background: var(--td-bg-color-container);
