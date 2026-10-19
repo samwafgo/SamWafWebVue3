@@ -1111,24 +1111,38 @@ function hasHostBadges(row: Record<string, any>): boolean {
   return row.ssl === SSL_STATUS.SSL || portTags(row).length > 0 || Number(row.global_host) === 1 || !!row.group_code;
 }
 
-/** 健康三态：ok 正常 / bad 异常 / unknown 未知；全局站点返回 none（不展示） */
+/** 健康检测是否关闭（解析 healthy_json；空串/解析失败视为开启，与后端默认一致） */
+function healthCheckOff(row: Record<string, any>): boolean {
+  const raw = row && row.healthy_json;
+  if (!raw) return false;
+  try {
+    return Number(JSON.parse(raw).is_enable_healthy) !== 1;
+  } catch (e) {
+    return false;
+  }
+}
+
+/** 健康三态：ok 正常 / bad 异常 / unknown 未知（已开启暂无数据）/ off 检测已关闭；全局站点返回 none（不展示） */
 function healthState(row: Record<string, any>): string {
   if (!row || Number(row.global_host) === 1) return 'none';
+  if (healthCheckOff(row)) return 'off';
   const hs = row.healthy_status;
   if (!Array.isArray(hs) || hs.length === 0) return 'unknown';
   return hs.some((h: any) => h && h.IsHealthy === false) ? 'bad' : 'ok';
 }
 
-/** 健康状态文案：正常 / 异常 / 未知 */
+/** 健康状态文案：正常 / 异常 / 暂无数据 / 检测已关闭 */
 function healthText(row: Record<string, any>): string {
   const st = healthState(row);
   if (st === 'ok') return t('page.host.healthy_status_normal');
   if (st === 'bad') return t('page.host.healthy_status_abnormal');
+  if (st === 'off') return t('page.host.healthy_status_off');
   return t('page.host.healthy_status_unknown');
 }
 
-/** 最近检测时间：列里只放 时:分:秒，完整时间放 tooltip */
+/** 最近检测时间：列里只放 时:分:秒，完整时间放 tooltip；检测关闭时不显示 */
 function healthCheckTime(row: Record<string, any>): string {
+  if (healthState(row) === 'off') return '';
   const hs = Array.isArray(row && row.healthy_status) ? row.healthy_status : [];
   const entry = hs.find((h: any) => h && h.IsHealthy === false) || hs[0] || {};
   const raw = entry.LastCheckTime;
@@ -1139,9 +1153,10 @@ function healthCheckTime(row: Record<string, any>): string {
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-/** 健康状态 tooltip：状态 + 完整检测时间 + 失败次数与原因（信息量比只有一个图标大） */
+/** 健康状态 tooltip：状态 + 完整检测时间 + 失败次数与原因（信息量比只有一个图标大）；检测关闭只显示文案 */
 function healthTip(row: Record<string, any>): string {
   const st = healthState(row);
+  if (st === 'off') return healthText(row);
   const hs = Array.isArray(row && row.healthy_status) ? row.healthy_status : [];
   const entry = hs.find((h: any) => h && h.IsHealthy === false) || hs[0] || {};
   const parts = [healthText(row)];
@@ -1166,9 +1181,10 @@ function formatBackendAddr(row: Record<string, any>): string {
   return row.remote_port ? `${host}:${row.remote_port}` : host;
 }
 
-/** 单站点是否健康异常：全局站点不计；无健康数据视为「未知」不算异常 */
+/** 单站点是否健康异常：全局站点不计；检测关闭或无数据视为「未知」不算异常 */
 function isHostAbnormal(row: Record<string, any>): boolean {
   if (!row || Number(row.global_host) === 1) return false;
+  if (healthCheckOff(row)) return false;
   const hs = row.healthy_status;
   if (!Array.isArray(hs) || hs.length === 0) return false;
   return hs.some((h: any) => h && h.IsHealthy === false);
@@ -2456,7 +2472,9 @@ onMounted(() => {
 }
 
 .be-health.is-unknown .bh-ico,
-.be-health.is-unknown .bh-text {
+.be-health.is-unknown .bh-text,
+.be-health.is-off .bh-ico,
+.be-health.is-off .bh-text {
   color: var(--td-text-color-placeholder);
 }
 
