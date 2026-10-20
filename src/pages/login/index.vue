@@ -1,7 +1,7 @@
 <template>
   <div class="login-wrapper">
     <div class="login-container">
-      <h1 class="login-title">{{ t('login.login_sub_title') }}</h1>
+      <h1 class="login-title">{{ adminTitles.admin_title || t('login.login_sub_title') }}</h1>
       <!-- 登录失败的原因就摆在表单上方（视线必经之路），不再飘到右上角去。
            同一时刻只留一条，新的覆盖旧的 -->
       <t-alert v-if="loginError" theme="error" :message="loginError" class="login-error-tip" close @close="loginError = ''" />
@@ -80,6 +80,7 @@ import { CODE } from '@/utils/request';
 import { getSafeRedirectUrl } from '@/constants';
 import { getOnlineUrl } from '@/utils/usuallytool';
 import { takeLogoutReason } from '@/utils/localnotice';
+import { adminTitles } from '@/utils/adminTitles';
 import ChangePasswordDialog from '@/pages/waf/account/components/ChangePasswordDialog.vue';
 
 const { t } = useI18n();
@@ -181,6 +182,8 @@ function handleJumpOnlineUrl() {
   margin: 0 0 32px;
   font-size: 24px;
   text-align: center;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .copyright {

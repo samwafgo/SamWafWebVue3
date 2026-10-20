@@ -14,17 +14,23 @@ import i18n from './i18n';
 import './permission';
 import { setupDialogOverlayGuard } from './utils/dialogOverlayGuard';
 import { setupMessageGuard } from './utils/messageguard';
+import { loadAdminTitles } from './utils/adminTitles';
 
 setupDialogOverlayGuard();
 // 全局提示去重 + 跳登录后抑制回声，见
 // SamWafTechDoc/开发规则规范/2026-08-28-前端全局提示与铃铛消息.md
 setupMessageGuard();
 
-createApp(App)
-  .use(TDesign)
-  .use(pinia)
-  .use(router)
-  .use(i18n)
-  .component('help-block', HelpBlock)
-  .component('ip-lookup', IpLookup)
-  .mount('#app');
+async function bootstrap() {
+  await loadAdminTitles();
+  createApp(App)
+    .use(TDesign)
+    .use(pinia)
+    .use(router)
+    .use(i18n)
+    .component('help-block', HelpBlock)
+    .component('ip-lookup', IpLookup)
+    .mount('#app');
+}
+
+void bootstrap();

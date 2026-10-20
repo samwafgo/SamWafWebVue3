@@ -1,4 +1,13 @@
 import request from '@/utils/request';
+import type { AdminTitles } from '@/utils/adminTitles';
+
+export function getAdminTitlesApi() {
+  return request<AdminTitles>({ url: 'vipconfig/getAdminTitles', method: 'get' });
+}
+
+export function updateAdminTitlesApi(data: AdminTitles) {
+  return request<AdminTitles>({ url: 'vipconfig/updateAdminTitles', method: 'post', data });
+}
 
 /** 更新管理端 IP 白名单 */
 export function updateIpWhitelistApi(data: Record<string, any>) {

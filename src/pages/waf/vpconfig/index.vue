@@ -726,6 +726,40 @@
       </t-loading>
     </t-card>
 
+    <t-card id="vp-sec-title" class="list-card-container" :style="sectionStyle">
+      <template #header>
+        <t-row justify="space-between">
+          <div class="card-header-title">
+            <t-space>
+              <div>{{ t('page.vpconfig.admin_title') }}</div>
+              <t-tooltip :content="t('page.vpconfig.admin_title_description')"><help-circle-icon /></t-tooltip>
+            </t-space>
+          </div>
+          <t-space>
+            <t-button theme="primary" :disabled="adminTitlesLoading" @click="fetchAdminTitles">{{ t('common.refresh') }}</t-button>
+            <t-button theme="primary" :loading="adminTitlesLoading" :disabled="!adminTitlesLoaded" @click="handleSaveAdminTitles">{{ t('common.save') }}</t-button>
+          </t-space>
+        </t-row>
+      </template>
+      <t-loading :loading="adminTitlesLoading">
+        <t-form :data="adminTitlesFormData" :label-width="180">
+          <t-form-item :label="t('page.vpconfig.admin_title')" name="admin_title">
+            <div style="width: 100%">
+              <t-input
+                v-model="adminTitlesFormData.admin_title"
+                :placeholder="t('page.vpconfig.admin_title_placeholder')"
+                :maxlength="100"
+                :disabled="adminTitlesLoading || !adminTitlesLoaded"
+                style="width: 480px; max-width: 100%"
+                clearable
+              />
+              <div class="form-item-tips">{{ t('page.vpconfig.admin_title_tips') }}</div>
+            </div>
+          </t-form-item>
+        </t-form>
+      </t-loading>
+    </t-card>
+
     <!-- 通知标题前缀卡片 -->
     <t-card id="vp-sec-notice" class="list-card-container" :style="sectionStyle">
       <template #header>
@@ -842,6 +876,8 @@ import {
   getIpWhitelistApi,
   getManageTrustedProxiesApi,
   getNoticeTitleApi,
+  getAdminTitlesApi,
+  updateAdminTitlesApi,
   getSecurityEntryApi,
   getSslStatusApi,
   restartManagerApi,
@@ -871,6 +907,7 @@ import { wafCDNProviderInfoApi } from '@/apis/cdnip';
 import { get_detail_by_item_api, edit_system_config_by_item_api } from '@/apis/systemconfig';
 import { useRoute, useRouter } from 'vue-router';
 import { isLoopbackHost } from '@/utils/insecure';
+import { applyAdminTitles } from '@/utils/adminTitles';
 
 // 外部入口（如顶部 HTTP 提示条）用 ?section=xxx 指定落地后停在哪一节。
 // URL 里走短名而不是锚点 id：短名是对外契约，id 是本页实现，改 id 不该牵动调用方
@@ -881,6 +918,7 @@ const SECTION_BY_KEY: Record<string, string> = {
   domain: 'vp-sec-domain',
   access: 'vp-sec-access',
   entry: 'vp-sec-entry',
+  title: 'vp-sec-title',
   notice: 'vp-sec-notice',
 };
 
@@ -925,6 +963,9 @@ const certListLoading = ref(false);
 const restartDialogVisible = ref(false);
 const securityEntryLoading = ref(false);
 const regenerateDialogVisible = ref(false);
+const adminTitlesLoading = ref(false);
+const adminTitlesLoaded = ref(false);
+const adminTitlesFormData = reactive({ admin_title: '' });
 const noticeTitleLoading = ref(false);
 const noticeTitleFormData = reactive({
   notice_title: '',
@@ -1048,6 +1089,7 @@ onMounted(() => {
   fetchSslBindCert();
   fetchLocalCertStatus();
   fetchSecurityEntry();
+  fetchAdminTitles();
   fetchNoticeTitle();
 });
 
@@ -2128,6 +2170,45 @@ function handleRegenerateCode() {
     });
 }
 
+async function fetchAdminTitles() {
+  if (adminTitlesLoading.value) return;
+  adminTitlesLoading.value = true;
+  adminTitlesLoaded.value = false;
+  try {
+    const res = await getAdminTitlesApi();
+    if (res.code === 0 && typeof res.data?.admin_title === 'string') {
+      adminTitlesFormData.admin_title = res.data.admin_title;
+      applyAdminTitles(res.data);
+      adminTitlesLoaded.value = true;
+    } else {
+      MessagePlugin.error(res.msg || t('common.tips.api_error'));
+    }
+  } catch {
+    MessagePlugin.error(t('common.tips.api_error'));
+  } finally {
+    adminTitlesLoading.value = false;
+  }
+}
+
+async function handleSaveAdminTitles() {
+  if (adminTitlesLoading.value || !adminTitlesLoaded.value) return;
+  adminTitlesLoading.value = true;
+  try {
+    const res = await updateAdminTitlesApi({ admin_title: adminTitlesFormData.admin_title });
+    if (res.code === 0 && typeof res.data?.admin_title === 'string') {
+      adminTitlesFormData.admin_title = res.data.admin_title;
+      applyAdminTitles(res.data);
+      MessagePlugin.success(t('common.tips.save_success'));
+    } else {
+      MessagePlugin.error(res.msg || t('common.tips.save_failed'));
+    }
+  } catch {
+    MessagePlugin.error(t('common.tips.save_failed'));
+  } finally {
+    adminTitlesLoading.value = false;
+  }
+}
+
 function fetchNoticeTitle() {
   noticeTitleLoading.value = true;
   getNoticeTitleApi({})
@@ -2228,6 +2309,7 @@ const sections = computed(() => [
   { id: 'vp-sec-domain', label: t('page.vpconfig.domain_whitelist_title'), show: true, dirty: false },
   { id: 'vp-sec-access', label: t('page.vpconfig.access_cert_title'), show: true, dirty: accessDirty.value || restartPending.value },
   { id: 'vp-sec-entry', label: t('page.vpconfig.security_entry_title'), show: true, dirty: false },
+  { id: 'vp-sec-title', label: t('page.vpconfig.admin_title'), show: true, dirty: false },
   { id: 'vp-sec-notice', label: t('page.vpconfig.notice_title_title'), show: true, dirty: false },
 ]);
 const visibleSections = computed(() => sections.value.filter((s) => s.show));
