@@ -146,6 +146,17 @@
               </t-option>
             </t-select>
           </t-form-item>
+          <t-form-item :label="t('page.visit_log.url_keyword')" name="url_keyword">
+            <t-input
+              v-model="searchformData.url_keyword"
+              class="form-item-content"
+              type="search"
+              :maxlength="2048"
+              clearable
+              :placeholder="t('page.visit_log.url_keyword_placeholder')"
+              :style="{ minWidth: '240px' }"
+            />
+          </t-form-item>
           <t-form-item :label="t('page.visit_log.rule_name')" name="rule">
             <t-input
               v-model="searchformData.rule"
@@ -740,7 +751,7 @@ const COLUMN_PREF_NAME = 'visit_log_columns'; // 服务端偏好名（后端白�
 
 // 可由外部路由 query 预设的筛选字段（必须是 searchformData 的合法键，防止任意 query 注入）。
 // 不含 unix_add_time_begin/end（由日期控件驱动）和 current_db_name（由 loadShareDbList 异步定值）
-const ROUTE_FILTER_QUERY_KEYS = ['action', 'src_ip', 'host_code', 'rule', 'req_uuid', 'status_code', 'method', 'log_only_mode', 'view_type'];
+const ROUTE_FILTER_QUERY_KEYS = ['action', 'src_ip', 'host_code', 'url_keyword', 'rule', 'req_uuid', 'status_code', 'method', 'log_only_mode', 'view_type'];
 // 外部页面可用这两个 query 指定日期区间（形如 2026-07-01 00:00:00），不传则用"今天"
 const ROUTE_DATE_QUERY_KEYS = ['date_begin', 'date_end'];
 
@@ -1089,6 +1100,7 @@ const pagination = reactive({
 });
 
 const searchformData = ref<Record<string, any>>({
+  url_keyword: '',
   rule: '',
   req_uuid: '',
   action: '',
@@ -1723,7 +1735,7 @@ function getFilteredSearchData() {
   const filteredData: Record<string, any> = {};
   Object.keys(searchformData.value).forEach((key) => {
     const value = searchformData.value[key];
-    if (typeof value === 'string') {
+    if (typeof value === 'string' && key !== 'url_keyword') {
       filteredData[key] = value.trim();
     } else {
       filteredData[key] = value;
