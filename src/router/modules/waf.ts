@@ -119,10 +119,24 @@ const wafRoutes: RouteRecordRaw[] = [
         meta: { title: 'menu.host.blocking_page' },
       },
       {
+        path: 'wafIPBan',
+        name: 'WafIPBan',
+        component: () => import('@/pages/waf/ip_ban/index.vue'),
+        meta: { title: 'menu.host.ip_ban', keepAlive: false },
+      },
+      {
         path: 'wafIPFailure',
         name: 'WafIPFailure',
-        component: () => import('@/pages/waf/ip_failure/index.vue'),
-        meta: { title: 'menu.host.ip_failure' },
+        // 旧入口保留为隐藏重定向：老链接/书签跳到统一入口并带上来源，
+        // 目标页按 query.source 选中对应封禁列表
+        redirect: (to) => ({ name: 'WafIPBan', query: { ...to.query, source: 'failure' }, hash: to.hash }),
+        meta: { title: 'menu.host.ip_ban', hidden: true },
+      },
+      {
+        path: 'wafRuleBan',
+        name: 'WafRuleBan',
+        redirect: (to) => ({ name: 'WafIPBan', query: { ...to.query, source: 'rule' }, hash: to.hash }),
+        meta: { title: 'menu.host.ip_ban', hidden: true },
       },
       {
         path: 'wafFirewallIPBlock',

@@ -88,6 +88,16 @@
                   <a v-if="hit.source === 'threat_ip'" class="ipl-exclude-link" @click="openExclude(hit)">
                     {{ t('common.ip_lookup.exclude_btn') }}
                   </a>
+                  <t-button
+                    v-if="hit.source === 'rule_ban'"
+                    theme="primary"
+                    variant="text"
+                    size="small"
+                    :loading="ruleBanRemoving"
+                    @click="confirmRemoveRuleBan"
+                  >
+                    {{ t('common.ip_lookup.rule_ban_remove') }}
+                  </t-button>
                   <span class="ipl-effect">{{ effectText(hit.effect) }}</span>
                 </div>
                 <div v-if="hit.detail" class="ipl-detail">{{ hit.detail }}</div>
@@ -203,7 +213,7 @@
 
 <script setup lang="ts">
 import { CheckCircleFilledIcon, ErrorCircleFilledIcon, LoadingIcon, SearchIcon } from 'tdesign-icons-vue-next';
-import { MessagePlugin } from 'tdesign-vue-next';
+import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next';
 import { computed, nextTick, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -211,6 +221,7 @@ import { allhost } from '@/apis/host';
 import { wafIPBlockAddApi } from '@/apis/ipblock';
 import { wafIPLookupApi } from '@/apis/iplookup';
 import { wafIPWhiteAddApi } from '@/apis/ipwhite';
+import { wafRuleBanRemoveBanIpApi } from '@/apis/rule_ban';
 import { wafThreatIPExcludeAddApi } from '@/apis/threatip';
 
 // 全局站点在库里就是一条 host="全局网站"、port=0 的普通记录，code 是 uuid。
@@ -227,7 +238,7 @@ type Hit = {
   system_layer?: boolean;
 };
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     /** 预填的 IP，比如从日志某一行点进来 */
     value?: string;
@@ -272,12 +283,13 @@ const allowForm = reactive({ host_code: '', remarks: '', target_layer: 'waf' });
 const excludeVisible = ref(false);
 const excludeSaving = ref(false);
 const excludeForm = reactive({ entry: '', remarks: '' });
+const ruleBanRemoving = ref(false);
 
 // 分批依据是「快慢」而不是「业务分类」：名单类查库几十毫秒，
 // 威胁情报要编译十万条的大集合，放一批里会被拖死
 const groups = computed(() => [
   { key: 'list', label: t('common.ip_lookup.step_list'), sources: ['ip_white', 'ip_black', 'ip_group', 'log_exclude'] },
-  { key: 'ban', label: t('common.ip_lookup.step_ban'), sources: ['ip_failure', 'cc_ban', 'firewall'] },
+  { key: 'ban', label: t('common.ip_lookup.step_ban'), sources: ['ip_failure', 'cc_ban', 'rule_ban', 'firewall'] },
   { key: 'threat', label: t('common.ip_lookup.step_threat'), sources: ['threat_ip'] },
   { key: 'cdn', label: t('common.ip_lookup.step_cdn'), sources: ['cdn'] },
 ]);
@@ -410,6 +422,36 @@ function open(prefill?: string) {
 function onClosed() {
   loading.value = false;
   excludeVisible.value = false;
+}
+
+function confirmRemoveRuleBan() {
+  if (ruleBanRemoving.value) return;
+  const ip = result.ip;
+  const dialog = DialogPlugin.confirm({
+    header: t('common.ip_lookup.rule_ban_remove'),
+    body: t('common.ip_lookup.rule_ban_remove_confirm', { ip }),
+    zIndex: props.zIndex + 1,
+    onConfirm: () => {
+      if (ruleBanRemoving.value) return;
+      ruleBanRemoving.value = true;
+      return wafRuleBanRemoveBanIpApi({ ip })
+        .then((res: any) => {
+          if (res.code === 0) {
+            MessagePlugin.success(res.msg);
+            dialog.destroy();
+            if (visible.value && result.ip === ip) doQuery();
+          } else {
+            MessagePlugin.error(res.msg);
+          }
+        })
+        .catch(() => {
+          MessagePlugin.error(t('common.ip_lookup.rule_ban_remove_failed'));
+        })
+        .finally(() => {
+          ruleBanRemoving.value = false;
+        });
+    },
+  });
 }
 
 function loadHostDic() {

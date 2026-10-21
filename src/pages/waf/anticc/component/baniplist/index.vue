@@ -1,6 +1,6 @@
 <template>
   <div>
-    <t-card class="list-card-container">
+    <component :is="embedded ? 'div' : 't-card'" :class="{ 'list-card-container': !embedded }">
       <div class="ban-toolbar">
         <t-button variant="outline" size="small" :loading="dataLoading" @click="getList">
           {{ t('common.refresh') }}
@@ -42,20 +42,23 @@
           </template>
         </t-table>
       </div>
-    </t-card>
+    </component>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { MessagePlugin, type PageInfo, type TableProps } from 'tdesign-vue-next';
+import { DialogPlugin, MessagePlugin, type PageInfo, type TableProps } from 'tdesign-vue-next';
 import { wafAntiCCBanIPListApi, wafAntiCCRemoveBanIpApi } from '@/apis/anticc';
 import { allhost } from '@/apis/host';
+
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false });
 
 const { t } = useI18n();
 
 const dataLoading = ref(false);
+const removing = ref(false);
 const data = ref<Record<string, any>[]>([]); // 当前筛选后的视图
 const rawData = ref<Record<string, any>[]>([]); // 接口返回的原始数据，筛选都在它之上做
 const filterScope = ref(''); // 作用范围：空=全部，global=全局生效，其余为站点码
@@ -181,18 +184,32 @@ function rehandlePageChange(pageInfo: PageInfo) {
 }
 
 function handleRemoveBanIp(e: { row: Record<string, any> }) {
-  wafAntiCCRemoveBanIpApi({ ip: e.row.ip })
-    .then((res: any) => {
-      if (res.code === 0) {
-        MessagePlugin.success(res.msg);
-        getList();
-      } else {
-        MessagePlugin.warning(res.msg);
-      }
-    })
-    .catch((e2: Error) => {
-      console.log(e2);
-    });
+  if (removing.value) return;
+  const { ip } = e.row;
+  const dialog = DialogPlugin.confirm({
+    header: t('page.ip_ban.cc_clear'),
+    body: t('page.ip_ban.cc_clear_confirm', { ip }),
+    onConfirm: () => {
+      if (removing.value) return;
+      removing.value = true;
+      return wafAntiCCRemoveBanIpApi({ ip })
+        .then((res: any) => {
+          if (res.code === 0) {
+            MessagePlugin.success(res.msg);
+            getList();
+            dialog.destroy();
+          } else {
+            MessagePlugin.warning(res.msg);
+          }
+        })
+        .catch(() => {
+          MessagePlugin.error(t('page.ip_ban.remove_failed'));
+        })
+        .finally(() => {
+          removing.value = false;
+        });
+    },
+  });
 }
 
 const onFilterChange: TableProps['onFilterChange'] = (e: Record<string, any>) => {
