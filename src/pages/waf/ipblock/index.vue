@@ -1,76 +1,88 @@
 <template>
   <div>
-    <t-card class="list-card-container">
-      <t-row justify="space-between">
-        <div class="left-operation-container">
-          <t-button @click="handleAddIpBlock">{{ t('page.ipblock.button_add_ip') }}</t-button>
-          <t-button variant="base" theme="default" @click="HandleExportExcel()">{{ t('page.ipblock.export_data') }}</t-button>
-          <t-button theme="danger" variant="outline" :disabled="selectedRowKeys.length === 0" @click="handleBatchDelete">
-            {{ t('page.ipblock.button_batch_delete') }}
-          </t-button>
-          <t-button theme="danger" :disabled="data.length === 0" @click="handleClearAll">
-            {{ t('page.ipblock.button_clear_all') }}
-          </t-button>
-        </div>
-        <div class="right-operation-container">
-          <t-form :data="searchformData" :label-width="80" layout="inline" colon :style="{ marginBottom: '8px' }">
-            <t-form-item :label="t('page.ipblock.label_website')" name="host_code">
-              <t-select v-model="searchformData.host_code" clearable filterable :style="{ width: '150px' }">
-                <t-option v-for="(item, index) in host_dic" :key="index" :value="index" :label="item">
-                  {{ item }}
-                </t-option>
-              </t-select>
-            </t-form-item>
-            <t-form-item label="Ip" name="ip">
-              <t-input v-model="searchformData.ip" class="search-input" clearable />
-            </t-form-item>
-            <t-form-item>
-              <t-button theme="primary" :style="{ marginLeft: '8px' }" @click="getList()">
-                {{ t('common.search') }}
-              </t-button>
-            </t-form-item>
-          </t-form>
-        </div>
-      </t-row>
-      <help-block :summary="t('page.ipblock.alert_message')" doc="guide/IPBlack" />
-      <div class="table-container">
-        <t-table
-          :columns="columns"
-          :data="data"
-          :row-key="rowKey"
-          vertical-align="top"
-          hover
-          :pagination="pagination"
-          :selected-row-keys="selectedRowKeys"
-          :loading="dataLoading"
-          @page-change="rehandlePageChange"
-          @select-change="rehandleSelectChange"
-        >
-          <template #host_code="{ row }">
-            <span>{{ host_dic[row.host_code] }}</span>
-          </template>
-          <template #ip_type="{ row }">
-            <t-tag v-if="row.ip_type === 'group'" theme="primary" variant="light">
-              {{ t('page.ipblock.entry_type_group') }}
-            </t-tag>
-            <span v-else>{{ t('page.ipblock.entry_type_ip') }}</span>
-          </template>
-          <template #ip="{ row }">
-            <span v-if="row.ip_type === 'group'">{{ groupLabel(row.group_code) }}</span>
-            <span v-else>{{ row.ip }}</span>
-          </template>
-          <template #op="slotProps">
-            <a class="t-button-link" @click="handleClickEdit(slotProps)">{{ t('common.edit') }}</a>
-            <a class="t-button-link" @click="handleClickDelete(slotProps)">{{ t('common.delete') }}</a>
-          </template>
-        </t-table>
+    <t-tabs v-model="activeSourceTab" @change="onSourceTabChange">
+      <t-tab-panel value="manual" :label="t('page.ipblock.tab_manual')">
+        <t-card class="list-card-container">
+        <t-row justify="space-between">
+          <div class="left-operation-container">
+            <t-button @click="handleAddIpBlock">{{ t('page.ipblock.button_add_ip') }}</t-button>
+            <t-button variant="base" theme="default" @click="HandleExportExcel()">{{ t('page.ipblock.export_data') }}</t-button>
+            <t-button theme="danger" variant="outline" :disabled="selectedRowKeys.length === 0" @click="handleBatchDelete">
+              {{ t('page.ipblock.button_batch_delete') }}
+            </t-button>
+            <t-button theme="danger" :disabled="data.length === 0" @click="handleClearAll">
+              {{ t('page.ipblock.button_clear_all') }}
+            </t-button>
+          </div>
+          <div class="right-operation-container">
+            <t-form :data="searchformData" :label-width="80" layout="inline" colon :style="{ marginBottom: '8px' }">
+              <t-form-item :label="t('page.ipblock.label_website')" name="host_code">
+                <t-select v-model="searchformData.host_code" clearable filterable :style="{ width: '150px' }">
+                  <t-option v-for="(item, index) in host_dic" :key="index" :value="index" :label="item">
+                    {{ item }}
+                  </t-option>
+                </t-select>
+              </t-form-item>
+              <t-form-item label="Ip" name="ip">
+                <t-input v-model="searchformData.ip" class="search-input" clearable />
+              </t-form-item>
+              <t-form-item>
+                <t-button theme="primary" :style="{ marginLeft: '8px' }" @click="getList()">
+                  {{ t('common.search') }}
+                </t-button>
+              </t-form-item>
+            </t-form>
+          </div>
+        </t-row>
+        <help-block :summary="t('page.ipblock.alert_message')" doc="guide/IPBlack" />
+        <div class="table-container">
+          <t-table
+            :columns="columns"
+            :data="data"
+            :row-key="rowKey"
+            vertical-align="top"
+            hover
+            :pagination="pagination"
+            :selected-row-keys="selectedRowKeys"
+            :loading="dataLoading"
+            @page-change="rehandlePageChange"
+            @select-change="rehandleSelectChange"
+          >
+            <template #host_code="{ row }">
+              <span>{{ host_dic[row.host_code] }}</span>
+            </template>
+            <template #ip_type="{ row }">
+              <t-tag v-if="row.ip_type === 'group'" theme="primary" variant="light">
+                {{ t('page.ipblock.entry_type_group') }}
+              </t-tag>
+              <span v-else>{{ t('page.ipblock.entry_type_ip') }}</span>
+            </template>
+            <template #ip="{ row }">
+              <span v-if="row.ip_type === 'group'">{{ groupLabel(row.group_code) }}</span>
+              <span v-else>{{ row.ip }}</span>
+            </template>
+            <template #is_enable="{ row }">
+              <t-switch :value="row.is_enable === 1" @change="(v: boolean) => onToggle(row, v)" />
+            </template>
+            <template #op="slotProps">
+              <a class="t-button-link" @click="handleClickEdit(slotProps)">{{ t('common.edit') }}</a>
+              <a class="t-button-link" @click="handleClickDelete(slotProps)">{{ t('common.delete') }}</a>
+            </template>
+          </t-table>
       </div>
-    </t-card>
+        </t-card>
+      </t-tab-panel>
+      <t-tab-panel value="sub" :label="t('page.ipblock.tab_sub_source')">
+        <t-card class="list-card-container">
+          <ThreatSubSourcePanel ref="subPanel" land="waf" />
+        </t-card>
+      </t-tab-panel>
+    </t-tabs>
 
     <t-dialog v-model:visible="addFormVisible" :header="t('common.new')" :width="680" :footer="false">
       <t-form :data="formData" :rules="rules" :label-width="100" @submit="onSubmit">
         <t-form-item :label="t('page.ipblock.label_website')" name="host_code">
-          <t-select v-model="formData.host_code" clearable filterable :style="{ width: '480px' }">
+          <t-select v-model="formData.host_code" clearable filterable :style="{ width: '480px' }" @change="onHostChange">
             <t-option v-for="(item, index) in host_dic" :key="index" :value="index" :label="item">
               {{ item }}
             </t-option>
@@ -98,6 +110,24 @@
           <a class="t-button-link" style="margin-left: 8px" @click="router.push({ name: 'WafIpGroup' })">
             {{ t('page.ipblock.goto_group_manage') }}
           </a>
+        </t-form-item>
+        <t-form-item name="target_layer">
+          <template #label>
+            <span>{{ t('page.ipblock.label_target_layer') }}</span>
+            <t-tooltip :content="t('page.ipblock.target_layer_tips')" placement="top" :overlay-style="{ width: '300px' }" show-arrow>
+              <t-icon name="help-circle" style="margin-left: 4px; cursor: pointer" />
+            </t-tooltip>
+          </template>
+          <t-select v-model="formData.target_layer" :style="{ width: '480px' }">
+            <t-option value="waf" :label="t('page.ipblock.target_layer_waf')" />
+            <t-option value="system" :label="t('page.ipblock.target_layer_system')" :disabled="systemLayerDisabled" />
+            <t-option value="both" :label="t('page.ipblock.target_layer_both')" :disabled="systemLayerDisabled" />
+          </t-select>
+          <div v-if="systemLayerDisabled" class="form-tips">{{ t('page.ipblock.system_layer_unsupported') }}</div>
+          <div v-if="recommendReason" style="margin-top: 4px; font-size: 12px; color: var(--td-text-color-secondary)">{{ recommendReason }}</div>
+        </t-form-item>
+        <t-form-item :label="t('page.ipblock.col_enable')" name="is_enable">
+          <t-switch v-model="formData.is_enable" :custom-value="[1, 0]" />
         </t-form-item>
         <t-form-item :label="t('common.remarks')" name="remarks">
           <t-textarea v-model="formData.remarks" :style="{ width: '480px' }" name="remarks" />
@@ -138,6 +168,9 @@
             />
           </t-select>
         </t-form-item>
+        <t-form-item :label="t('page.ipblock.col_enable')" name="is_enable">
+          <t-switch v-model="formEditData.is_enable" :custom-value="[1, 0]" />
+        </t-form-item>
         <t-form-item :label="t('common.remarks')" name="remarks">
           <t-textarea v-model="formEditData.remarks" :style="{ width: '480px' }" name="remarks" />
         </t-form-item>
@@ -177,7 +210,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { MessagePlugin, type FormProps, type PageInfo, type TableProps } from 'tdesign-vue-next';
@@ -192,8 +225,11 @@ import {
   wafIPBlockDetailApi,
   wafIPBlockBatchDelApi,
   wafIPBlockDelAllApi,
+  wafIPBlockToggleApi,
+  wafIPBlockRecommendLayerApi,
 } from '@/apis/ipblock';
 import { wafIPGroupOptionsApi } from '@/apis/ipgroup';
+import ThreatSubSourcePanel from '@/pages/waf/threatip/components/ThreatSubSourcePanel.vue';
 
 const INITIAL_DATA = {
   host_code: '',
@@ -201,6 +237,9 @@ const INITIAL_DATA = {
   remarks: '',
   ip_type: 'ip',
   group_code: '',
+  // 封禁层级默认 WAF 应用层；不随站点推荐自动改选中值（推荐仅展示理由）
+  target_layer: 'waf',
+  is_enable: 1,
 };
 
 const { t } = useI18n();
@@ -213,6 +252,10 @@ const batchDeleteConfirmVisible = ref(false);
 const clearAllConfirmVisible = ref(false);
 const formData = ref<Record<string, any>>({ ...INITIAL_DATA });
 const formEditData = ref<Record<string, any>>({ ...INITIAL_DATA });
+// 推荐封禁层级的理由文案（仅提示，不改变默认选中）
+const recommendReason = ref('');
+const activeSourceTab = ref('manual');
+const subPanel = ref();
 
 // 新增与编辑各用一份校验规则：两个弹窗共用同一份时，
 // 依赖 ip_type 的条件校验会读到另一个弹窗的表单值而误判
@@ -271,6 +314,22 @@ function groupLabel(groupCode: string) {
   return g ? `${g.group_name} (${g.item_count})` : groupCode;
 }
 
+// 系统防火墙(iptables/netsh)只认单IP与CIDR，通配符/区间/IP组都表达不了。
+// 这里只是前端体验层的拦截，后端还会再挡一次。
+const systemLayerDisabled = computed(() => {
+  if (formData.value.ip_type === 'group') {
+    return true;
+  }
+  return /[*\-]/.test(formData.value.ip || '');
+});
+
+// 切到不支持系统层的写法时，把已选的层级拉回 WAF 应用层，避免提交时才报错
+watch(systemLayerDisabled, (disabled) => {
+  if (disabled && formData.value.target_layer !== 'waf') {
+    formData.value.target_layer = 'waf';
+  }
+});
+
 const dataLoading = ref(false);
 const data = ref<Record<string, any>[]>([]);
 const selectedRowKeys = ref<(string | number)[]>([]);
@@ -283,6 +342,7 @@ const columns = computed<TableProps['columns']>(() => [
   { title: t('page.ipblock.label_ip'), width: 200, ellipsis: true, colKey: 'ip' },
   { title: t('common.remarks'), width: 200, ellipsis: true, colKey: 'remarks' },
   { title: t('common.create_time'), width: 200, ellipsis: true, colKey: 'create_time' },
+  { title: t('page.ipblock.col_enable'), width: 90, colKey: 'is_enable' },
   { align: 'left', width: 200, colKey: 'op', title: t('common.op') },
 ]);
 
@@ -352,6 +412,42 @@ function rehandleSelectChange(keys: (string | number)[]) {
   selectedRowKeys.value = keys;
 }
 
+// 行内开关：成功与失败都重拉列表，让开关对齐库内真实状态
+function onToggle(row: Record<string, any>, checked: boolean) {
+  wafIPBlockToggleApi({ id: row.id, is_enable: checked ? 1 : 0 })
+    .then((res) => {
+      if (res.code === 0) {
+        MessagePlugin.success(res.msg);
+      } else {
+        MessagePlugin.warning(res.msg);
+      }
+    })
+    .catch((e: Error) => console.log(e))
+    .finally(() => getList());
+}
+
+// 切到"订阅来源"Tab 时刷新汇总
+function onSourceTabChange(val: string) {
+  if (val === 'sub' && subPanel.value) {
+    subPanel.value.refresh();
+  }
+}
+
+// 站点变化时展示后端推荐理由供参考；默认层级保持 WAF，不自动改选中值
+function onHostChange(hostCode: string) {
+  if (!hostCode) {
+    recommendReason.value = '';
+    return;
+  }
+  wafIPBlockRecommendLayerApi({ host_code: hostCode })
+    .then((res) => {
+      if (res.code === 0 && res.data) {
+        recommendReason.value = res.data.reason || '';
+      }
+    })
+    .catch((e: Error) => console.log(e));
+}
+
 function handleClickEdit(e: { row: Record<string, any> }) {
   editFormVisible.value = true;
   getDetail(e.row.id);
@@ -360,6 +456,7 @@ function handleClickEdit(e: { row: Record<string, any> }) {
 function handleAddIpBlock() {
   addFormVisible.value = true;
   formData.value = { ...INITIAL_DATA };
+  recommendReason.value = '';
   loadGroupOptions();
 }
 
@@ -403,6 +500,7 @@ const onSubmitEdit: FormProps['onSubmit'] = ({ firstError }) => {
 function onClickCloseBtn() {
   addFormVisible.value = false;
   formData.value = { ...INITIAL_DATA };
+  recommendReason.value = '';
 }
 
 function onClickCloseEditBtn() {
@@ -448,6 +546,8 @@ function getDetail(id: string | number) {
           // 存量记录的 ip_type 是空串，等价于「单条IP」
           ip_type: res.data.ip_type || 'ip',
           group_code: res.data.group_code || '',
+          // 详情未带开关字段时按启用处理
+          is_enable: res.data.is_enable === 0 ? 0 : 1,
         };
       }
     })

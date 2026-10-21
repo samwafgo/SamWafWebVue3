@@ -62,3 +62,12 @@ export function wafIPWhiteDelAllApi(params: Record<string, any>) {
     data: params,
   });
 }
+
+/** 切换IP白名单条目启用状态 */
+export function wafIPWhiteToggleApi(params: Record<string, any>) {
+  return request({
+    url: '/wafhost/ipwhite/toggle',
+    method: 'post',
+    data: params,
+  });
+}

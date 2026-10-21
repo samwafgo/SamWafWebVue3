@@ -71,3 +71,12 @@ export function wafIPBlockRecommendLayerApi(params: Record<string, any>) {
     params,
   });
 }
+
+/** 切换IP黑名单条目启用状态 */
+export function wafIPBlockToggleApi(params: Record<string, any>) {
+  return request({
+    url: '/wafhost/ipblock/toggle',
+    method: 'post',
+    data: params,
+  });
+}

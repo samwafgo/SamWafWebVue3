@@ -62,3 +62,12 @@ export function wafURLBlockDelAllApi(params: Record<string, any>) {
     data: params,
   });
 }
+
+/** 切换URL黑名单条目启用状态 */
+export function wafURLBlockToggleApi(params: Record<string, any>) {
+  return request({
+    url: '/wafhost/urlblock/toggle',
+    method: 'post',
+    data: params,
+  });
+}

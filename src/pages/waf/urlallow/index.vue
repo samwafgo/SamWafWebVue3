@@ -49,6 +49,9 @@
             <span>{{ host_dic[row.host_code] }}</span>
           </template>
 
+          <template #is_enable="{ row }">
+            <t-switch :value="row.is_enable === 1" @change="(v: boolean) => onToggle(row, v)" />
+          </template>
           <template #op="slotProps">
             <a class="t-button-link" @click="handleClickEdit(slotProps)">{{ t('common.edit') }}</a>
             <a class="t-button-link" @click="handleClickDelete(slotProps)">{{ t('common.delete') }}</a>
@@ -75,6 +78,9 @@
         </t-form-item>
         <t-form-item :label="t('page.urlallow.label_url')" name="url">
           <t-input v-model="formData.url" :style="{ width: '480px' }" />
+        </t-form-item>
+        <t-form-item :label="t('page.urlallow.col_enable')" name="is_enable">
+          <t-switch v-model="formData.is_enable" :custom-value="[1, 0]" />
         </t-form-item>
         <t-form-item :label="t('common.remarks')" name="remarks">
           <t-textarea v-model="formData.remarks" :style="{ width: '480px' }" name="remarks" />
@@ -104,6 +110,9 @@
         </t-form-item>
         <t-form-item :label="t('page.urlallow.label_url')" name="url">
           <t-input v-model="formEditData.url" :style="{ width: '480px' }" />
+        </t-form-item>
+        <t-form-item :label="t('page.urlallow.col_enable')" name="is_enable">
+          <t-switch v-model="formEditData.is_enable" :custom-value="[1, 0]" />
         </t-form-item>
         <t-form-item :label="t('common.remarks')" name="remarks">
           <t-textarea v-model="formEditData.remarks" :style="{ width: '480px' }" name="remarks" />
@@ -157,6 +166,7 @@ import {
   wafURLWhiteDetailApi,
   wafURLWhiteBatchDelApi,
   wafURLWhiteDelAllApi,
+  wafURLWhiteToggleApi,
 } from '@/apis/urlwhite';
 
 // compare_type 取值与后端约定为中文字符串
@@ -165,6 +175,7 @@ const INITIAL_DATA = {
   url: '',
   remarks: '',
   compare_type: '等于',
+  is_enable: 1,
 };
 
 const { t } = useI18n();
@@ -202,6 +213,7 @@ const columns = computed<TableProps['columns']>(() => [
   { title: t('page.urlallow.label_url'), width: 200, ellipsis: true, colKey: 'url' },
   { title: t('common.remarks'), width: 200, ellipsis: true, colKey: 'remarks' },
   { title: t('common.create_time'), width: 200, ellipsis: true, colKey: 'create_time' },
+  { title: t('page.urlallow.col_enable'), width: 90, colKey: 'is_enable' },
   { align: 'left', width: 200, colKey: 'op', title: t('common.op') },
 ]);
 
@@ -269,6 +281,20 @@ function rehandlePageChange(pageInfo: PageInfo) {
 
 function rehandleSelectChange(keys: (string | number)[]) {
   selectedRowKeys.value = keys;
+}
+
+// 行内开关：成功与失败都重拉列表，让开关对齐库内真实状态
+function onToggle(row: Record<string, any>, checked: boolean) {
+  wafURLWhiteToggleApi({ id: row.id, is_enable: checked ? 1 : 0 })
+    .then((res) => {
+      if (res.code === 0) {
+        MessagePlugin.success(res.msg);
+      } else {
+        MessagePlugin.warning(res.msg);
+      }
+    })
+    .catch((e: Error) => console.log(e))
+    .finally(() => getList());
 }
 
 function handleClickEdit(e: { row: Record<string, any> }) {
@@ -361,7 +387,11 @@ function getDetail(id: string | number) {
   wafURLWhiteDetailApi({ id })
     .then((res) => {
       if (res.code === 0) {
-        formEditData.value = { ...res.data };
+        formEditData.value = {
+          ...res.data,
+          // 详情未带开关字段时按启用处理
+          is_enable: res.data.is_enable === 0 ? 0 : 1,
+        };
       }
     })
     .catch((e: Error) => console.log(e));
