@@ -1,5 +1,43 @@
 <template>
   <div>
+    <t-card v-if="featureState === 'loading'" class="feature-card">
+      <div class="feature-loading" role="status">
+        <t-loading size="small" />
+        <span>{{ t('page.application.feature_loading') }}</span>
+      </div>
+    </t-card>
+    <t-card
+      v-else-if="featureState === 'disabled'"
+      class="feature-card"
+      :title="t('page.application.feature_disabled_title')"
+    >
+      <p>{{ t('page.application.feature_disabled_description') }}</p>
+      <ol class="feature-steps">
+        <li>
+          <strong>{{ t('page.application.feature_step_config_title') }}</strong>
+          <p>{{ t('page.application.feature_step_config') }}</p>
+          <pre>application_manage: true</pre>
+        </li>
+        <li>
+          <strong>{{ t('page.application.feature_step_restart_title') }}</strong>
+          <p>{{ t('page.application.feature_step_restart') }}</p>
+        </li>
+        <li>
+          <strong>{{ t('page.application.feature_step_password_title') }}</strong>
+          <p>{{ t('page.application.feature_step_password') }}</p>
+        </li>
+      </ol>
+      <t-button @click="checkFeatureStatus">{{ t('page.application.feature_recheck') }}</t-button>
+    </t-card>
+    <t-card
+      v-else-if="featureState === 'error'"
+      class="feature-card"
+      :title="t('page.application.feature_error_title')"
+    >
+      <p role="alert">{{ t('page.application.feature_error_description') }}</p>
+      <t-button @click="checkFeatureStatus">{{ t('page.application.feature_retry') }}</t-button>
+    </t-card>
+    <template v-else-if="featureState === 'enabled'">
     <t-card class="list-card-container">
       <t-row justify="space-between">
         <div class="left-operation-container">
@@ -167,6 +205,7 @@
         </div>
       </div>
     </t-dialog>
+    </template>
   </div>
 </template>
 
@@ -183,6 +222,7 @@ import {
   wafAppAddApi,
   wafAppDelApi,
   wafAppDetailApi,
+  wafAppFeatureStatusApi,
   wafAppListApi,
   wafAppRestartApi,
   wafAppStartApi,
@@ -218,6 +258,9 @@ function initFormData() {
   };
 }
 
+const featureState = ref<'loading' | 'disabled' | 'enabled' | 'error'>('loading');
+let featureChecking = false;
+let pageDestroyed = false;
 const dataLoading = ref(false);
 const data = ref<Record<string, any>[]>([]);
 const pagination = reactive({ total: 0, pageSize: 10, current: 1 });
@@ -260,24 +303,47 @@ const columns = computed<TableProps['columns']>(() => [
 ]);
 
 onMounted(() => {
-  getList();
+  checkFeatureStatus();
 });
 
 onBeforeUnmount(() => {
+  pageDestroyed = true;
   if (opPwdTimer) clearTimeout(opPwdTimer);
 });
 
+async function checkFeatureStatus() {
+  if (pageDestroyed || featureChecking) return;
+  featureChecking = true;
+  featureState.value = 'loading';
+  try {
+    const res = await wafAppFeatureStatusApi();
+    if (pageDestroyed) return;
+    if (!res || res.code !== 0 || typeof res.data?.enabled !== 'boolean') {
+      featureState.value = 'error';
+      return;
+    }
+    featureState.value = res.data.enabled ? 'enabled' : 'disabled';
+    if (featureState.value === 'enabled') getList();
+  } catch {
+    if (!pageDestroyed) featureState.value = 'error';
+  } finally {
+    featureChecking = false;
+  }
+}
+
 function getList() {
+  if (pageDestroyed || featureState.value !== 'enabled') return;
   dataLoading.value = true;
   wafAppListApi({ pageIndex: pagination.current, pageSize: pagination.pageSize })
     .then((res) => {
-      if (res && res.code === 0) {
+      if (!pageDestroyed && featureState.value === 'enabled' && res && res.code === 0) {
         data.value = res.data.list || [];
         pagination.total = res.data.total || 0;
       }
     })
+    .catch(() => {})
     .finally(() => {
-      dataLoading.value = false;
+      if (!pageDestroyed) dataLoading.value = false;
     });
 }
 
@@ -536,6 +602,46 @@ function onUpgradeDone() {
 </script>
 
 <style scoped>
+.feature-card {
+  max-width: 860px;
+}
+
+.feature-card p {
+  margin: 0 0 20px;
+  color: var(--td-text-color-secondary);
+  line-height: 1.7;
+}
+
+.feature-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+.feature-steps {
+  padding-left: 24px;
+  margin: 0 0 24px;
+  line-height: 1.8;
+}
+
+.feature-steps li + li {
+  margin-top: 12px;
+}
+
+.feature-steps p {
+  margin: 4px 0;
+}
+
+.feature-steps pre {
+  padding: 12px;
+  margin: 8px 0;
+  border-radius: var(--td-radius-default);
+  background: var(--td-bg-color-secondarycontainer);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .list-card-container {
   padding: 20px;
 }
