@@ -29,6 +29,12 @@ const wafRoutes: RouteRecordRaw[] = [
         meta: { title: 'menu.host.host_title' },
       },
       {
+        path: 'website-diagnostic',
+        name: 'WebsiteDiagnostic',
+        component: () => import('@/pages/waf/host/diagnostic.vue'),
+        meta: { title: 'page.host.diagnostic.title', hidden: true, keepAlive: false },
+      },
+      {
         path: 'wafrule',
         name: 'WafRule',
         component: () => import('@/pages/waf/rule/index.vue'),

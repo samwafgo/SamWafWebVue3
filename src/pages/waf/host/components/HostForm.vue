@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div ref="rootRef">
     <div class="host-form">
       <t-form :data="formData" :rules="rules" :label-width="230" @submit="onSubmit">
         <div
@@ -45,7 +45,7 @@
               </t-form-item>
             </div>
 
-            <div class="hf-sect">
+            <div class="hf-sect" data-diagnostic-section="listen">
               <h4 class="hf-sect-title">
                 {{ t('page.host.sect.listen') }}
                 <small>{{ t('page.host.sect.listen_desc') }}</small>
@@ -283,7 +283,7 @@
               </t-form-item>
             </div>
 
-            <div class="hf-sect">
+            <div class="hf-sect" data-diagnostic-section="backend">
               <h4 class="hf-sect-title">
                 {{ t('page.host.sect.backend') }}
                 <small>{{ t('page.host.sect.backend_desc') }}</small>
@@ -632,7 +632,7 @@
                 />
               </t-tooltip>
             </t-form-item>
-            <t-form-item :label="t('page.host.insecure_skip_verify')" name="insecure_skip_verify">
+            <t-form-item :label="t('page.host.insecure_skip_verify')" name="insecure_skip_verify" data-diagnostic-section="tls">
               <t-tooltip :content="t('page.host.insecure_skip_verify_tips')" placement="top" :overlay-style="{ width: '200px' }" show-arrow>
                 <t-radio-group v-model="formData.insecure_skip_verify">
                   <t-radio value="0">{{ t('common.off') }}</t-radio>
@@ -1032,11 +1032,13 @@ const props = withDefaults(
     hostGroups?: Record<string, any>[];
     // 打开时定位到哪个配置 Tab（1基础内容 4其他配置），供外部深链使用
     initTab?: number;
+    // 打开时滚动定位到哪个表单分节（listen/backend/tls），供网站访问诊断深链使用
+    initSection?: string;
     // 所在弹窗是否可见。弹窗内容只创建一次，不下发这个开关的话，
     // 在证书申请页新签发的证书，回到列表再打开编辑时下拉里仍然没有（只剩一串ID）
     dialogVisible?: boolean;
   }>(),
-  { isEdit: false, selectCanFilter: true, hostAddUrl: '', initTab: 0, hostGroups: () => [], dialogVisible: false },
+  { isEdit: false, selectCanFilter: true, hostAddUrl: '', initTab: 0, initSection: '', hostGroups: () => [], dialogVisible: false },
 );
 const emit = defineEmits<{
   (e: 'close'): void;
@@ -1537,6 +1539,7 @@ async function testHealth(config: Record<string, any>) {
 
 onBeforeUnmount(() => {
   cancelHealthTest();
+  if (diagnosticScrollTimer) clearTimeout(diagnosticScrollTimer);
 });
 
 const captchaConfigData = ref<Record<string, any>>({ ...INITIAL_CAPTCHA });
@@ -1563,6 +1566,29 @@ watch(
     if (val > 0) activeTab.value = val;
   },
   { immediate: true },
+);
+
+// 网站访问诊断「定位到相关配置」深链：打开编辑弹窗后滚动到指定分节。
+// 分节可能藏在不同 Tab 里，等 Tab 切换 + 弹窗渲染完成再滚。
+const rootRef = ref<HTMLElement | null>(null);
+let diagnosticScrollTimer: ReturnType<typeof setTimeout> | null = null;
+function scrollToDiagnosticSection() {
+  if (diagnosticScrollTimer) clearTimeout(diagnosticScrollTimer);
+  if (!props.dialogVisible || !['listen', 'backend', 'tls'].includes(props.initSection)) return;
+  nextTick(() => {
+    diagnosticScrollTimer = setTimeout(() => {
+      if (!props.dialogVisible || !rootRef.value) return;
+      const target = rootRef.value!.querySelector(`[data-diagnostic-section="${props.initSection}"]`);
+      if (target) target.scrollIntoView({ block: 'center', behavior: 'auto' });
+    }, 250);
+  });
+}
+watch(() => props.initSection, scrollToDiagnosticSection);
+watch(
+  () => props.dialogVisible,
+  (visible) => {
+    if (visible) nextTick(scrollToDiagnosticSection);
+  },
 );
 
 // Tab 布局：left=竖向（默认），top=横向；用户偏好持久化到 localStorage

@@ -27,6 +27,9 @@
             <t-button variant="outline" theme="default">{{ t('page.host.toolbar_import') }} ▾</t-button>
           </t-dropdown>
           <t-button variant="outline" theme="default" @click="handlePortOverview">{{ t('page.host.port_listen.overview_title') }}</t-button>
+          <t-button variant="outline" theme="default" @click="router.push({ name: 'WebsiteDiagnostic' })">{{
+            t('page.host.diagnostic.title')
+          }}</t-button>
         </div>
         <div class="ht-right">
           <t-form :data="searchformData" :label-width="80" colon layout="inline" :style="{ marginBottom: '8px' }">
@@ -415,6 +418,7 @@
         @group-changed="loadHostGroups"
         :is-edit="true"
         :init-tab="editInitTab"
+        :init-section="editInitSection"
         @close="onClickCloseEditBtn"
         @submit="onSubmitEdit"
         @tab-placement-change="onHostTabPlacementChange"
@@ -600,7 +604,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, markRaw, nextTick, onMounted, reactive, ref } from 'vue';
+import { computed, h, markRaw, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin, LoadingPlugin, type TableProps, type PageInfo } from 'tdesign-vue-next';
@@ -684,6 +688,8 @@ const addFormVisible = ref(false);
 const editFormVisible = ref(false);
 // 编辑弹窗打开时定位的 Tab(从访问日志"IP提取有问题?"跳来时定位到"其他配置")
 const editInitTab = ref(1);
+// 编辑弹窗打开时滚动定位的表单分节（网站访问诊断的「定位到相关配置」深链使用）
+const editInitSection = ref('');
 // 网站表单弹窗宽度：Tab 竖向布局(left)需要更宽，横向(top)保持 750
 const hostFormDialogWidth = ref(localStorage.getItem('samwaf_host_tab_placement') === 'top' ? 750 : 920);
 // HostForm 内切换 Tab 布局时联动调整弹窗宽度
@@ -1738,6 +1744,7 @@ function handleClickCopy(e: { row: Record<string, any> }) {
 
 function handleClickEdit(e: { row: Record<string, any> }) {
   editInitTab.value = 1;
+  editInitSection.value = '';
   const { code, global_host } = e.row;
   if (global_host === 1) {
     MessagePlugin.warning(t('page.host.forbid_for_global_site_only_change_guard_status'));
@@ -2196,16 +2203,31 @@ onMounted(() => {
   if (route.query && route.query.sourcePage === 'HomeFrist') {
     addFormVisible.value = true;
   }
-  // 别处（访问日志「IP提取有问题?」、CC 规则「去设置」）跳过来：直接打开该站点编辑弹窗并定位到对应页签
-  if (route.query && route.query.editcode) {
-    // tab 用名字传，避免调用方去记面板编号
-    const tabMap: Record<string, number> = { ipsource: 4, captcha: 7 };
-    editInitTab.value = tabMap[String(route.query.tab || '')] || 1;
-    formEditData.value = { code: '' };
-    editFormVisible.value = true;
-    getDetail(String(route.query.editcode));
-  }
+  // 别处（访问日志「IP提取有问题?」、CC 规则「去设置」、网站访问诊断的「定位到相关配置」）跳过来：
+  // 直接打开该站点编辑弹窗并定位到对应页签/分节
+  if (route.query && route.query.editcode) openEditorFromQuery();
 });
+
+// 路由查询串变化（如诊断页连续跳转同一站点）也要重新定位
+watch(
+  () => route.query,
+  () => {
+    if (route.name === 'WafHost' && route.query && route.query.editcode) openEditorFromQuery();
+  },
+);
+
+function openEditorFromQuery() {
+  if (route.name !== 'WafHost' || !route.query.editcode) return;
+  const editCode = String(route.query.editcode);
+  // tab 用名字传，避免调用方去记面板编号
+  const tabMap: Record<string, number> = { ipsource: 4, captcha: 7, basic: 1, other: 4 };
+  editInitTab.value = tabMap[String(route.query.tab || '')] || 1;
+  const section = String(route.query.section || '');
+  editInitSection.value = ['listen', 'backend', 'tls'].includes(section) ? section : '';
+  formEditData.value = { code: '' };
+  editFormVisible.value = true;
+  getDetail(editCode);
+}
 </script>
 
 <style scoped>
