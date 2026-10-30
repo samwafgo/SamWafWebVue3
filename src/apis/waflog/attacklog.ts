@@ -35,23 +35,6 @@ export function delsharedb(data: Record<string, any>) {
   });
 }
 
-/** 导出日志（按时间段导出选定层，参数见后端 ExportDBApi） */
-export function exportlog(params?: Record<string, any>) {
-  return request({
-    url: 'waflog/attack/export',
-    method: 'get',
-    params,
-  });
-}
-
-/** 下载已经生成好的数据 */
-export function downloadlog() {
-  return request({
-    url: 'waflog/attack/download',
-    method: 'get',
-  });
-}
-
 /** 查看日志详情 */
 export function geWebLogDetail(params: Record<string, any>) {
   return request({

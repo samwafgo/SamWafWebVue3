@@ -4,8 +4,9 @@
 
 <script setup lang="ts">
 import { onMounted } from 'vue';
-import { DialogPlugin } from 'tdesign-vue-next';
-import { v4 as uuidv4 } from 'uuid';
+import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next';
+import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 
 import websocket from '@/utils/websocket';
 import bus from '@/utils/bus';
@@ -20,6 +21,17 @@ const env = import.meta.env.MODE || 'development';
 
 const statsStore = useStatsStore();
 const notificationStore = useNotificationStore();
+const router = useRouter();
+const { t } = useI18n();
+
+function openLogExportTask(taskId: string) {
+  const id = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(taskId) ? taskId : '';
+  if (router.currentRoute.value.name === 'WafvisitLog') {
+    bus.emit('log-export-open', id);
+  } else {
+    router.push({ name: 'WafvisitLog', query: { export_task: id || 'tasks' } }).catch(() => {});
+  }
+}
 
 // WebSocket 断线重连的指数退避参数。
 // 后端会主动踢掉写超时(5s)/读超时(90s)的死连接，掉线后固定等 10s 再连的话，
@@ -190,15 +202,24 @@ function wsOnMessage(e: MessageEvent, gen: number) {
       });
       return;
     }
+    if (wsData.msg_cmd_type === 'LOG_EXPORT_READY') {
+      const attach = wsData.msg_data?.message_attach;
+      const taskId = attach && typeof attach.task_id === 'string' ? attach.task_id : '';
+      const dialog = DialogPlugin.confirm({
+        header: t('logExport.title'),
+        body: t('logExport.readyNotice'),
+        confirmBtn: t('logExport.detail'),
+        cancelBtn: t('common.cancel'),
+        onConfirm: () => {
+          dialog.destroy();
+          openLogExportTask(taskId);
+        },
+        onClose: () => dialog.destroy(),
+      });
+      return;
+    }
     if (wsData.msg_cmd_type === 'DOWNLOAD_LOG') {
-      const token = localStorage.getItem('access_token') || '';
-      const dlSecPath = getSecurityPath();
-      let downloadUrl =
-        env === 'development'
-          ? `http://127.0.0.1:26666${dlSecPath}/api/v1/waflog/attack/download`
-          : `${window.location.protocol}//${window.location.host}${dlSecPath}/api/v1/waflog/attack/download`;
-      downloadUrl = `${downloadUrl}?X-Token=${token}&X-Request-Time=${Math.floor(Date.now() / 1000).toString()}&X-Request-Id=${uuidv4()}`;
-      window.open(downloadUrl);
+      MessagePlugin.warning(t('logExport.oldNotice'));
       return;
     }
     if (wsData.msg_cmd_type === 'SystemStats') {

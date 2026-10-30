@@ -245,7 +245,7 @@
           </t-form-item>
           <t-form-item>
             <t-button theme="primary" :style="{ marginLeft: '8px' }" @click="getList('all')"> {{ t('common.search') }} </t-button>
-            <t-button v-if="attack_ip === '' && isFileBasedDb" theme="primary" :style="{ marginLeft: '8px' }" @click="openExportDialog">
+            <t-button v-if="attack_ip === '' && route.name === 'WafvisitLog'" theme="primary" :style="{ marginLeft: '8px' }" @click="openExportDialog">
               {{ t('common.export') }}
             </t-button>
             <t-button type="reset" variant="base" theme="default"> {{ t('common.reset') }} </t-button>
@@ -510,36 +510,7 @@
       </t-table>
     </t-dialog>
 
-    <t-dialog
-      v-model:visible="exportDbVisible"
-      :header="t('page.visit_log.export_db_file_header')"
-      width="600px"
-      :confirm-on-enter="true"
-      :on-close="() => (exportDbVisible = false)"
-      @confirm="handelExport"
-    >
-      <t-alert theme="info" :message="t('page.visit_log.export_db_file_content')" style="margin-bottom: 12px" />
-      <t-form :label-width="110">
-        <t-form-item :label="t('page.visit_log.export_time_range')">
-          <t-date-range-picker
-            v-model="exportForm.range"
-            enable-time-picker
-            clearable
-            :placeholder="t('page.visit_log.export_time_range_ph')"
-            value-type="YYYY-MM-DD HH:mm:ss"
-            style="width: 100%"
-          />
-        </t-form-item>
-        <t-form-item :label="t('page.visit_log.export_tiers')">
-          <t-checkbox-group v-model="exportForm.tiers">
-            <t-checkbox value="access">{{ t('page.visit_log.view_access') }}</t-checkbox>
-            <t-checkbox value="event">{{ t('page.visit_log.view_event') }}</t-checkbox>
-            <t-checkbox value="payload">{{ t('page.visit_log.export_tier_payload') }}</t-checkbox>
-            <t-checkbox value="weblog">{{ t('page.visit_log.export_tier_weblog') }}</t-checkbox>
-          </t-checkbox-group>
-        </t-form-item>
-      </t-form>
-    </t-dialog>
+    <LogExportDialog v-if="attack_ip === '' && route.name === 'WafvisitLog'" ref="logExportDialog" />
 
     <t-dialog
       v-model:visible="visitDetailVisible"
@@ -707,13 +678,14 @@ import type { FormInstanceFunctions, FormProps, PageInfo, TableProps } from 'tde
 import { ChevronDownIcon, ChevronRightIcon, SettingIcon } from 'tdesign-icons-vue-next';
 
 import VisitDetailPage from './detail/index.vue';
-import { allsharedblist, attacklogVisitListApi, delsharedb, exportlog } from '@/apis/waflog/attacklog';
+import { allsharedblist, attacklogVisitListApi, delsharedb } from '@/apis/waflog/attacklog';
 import { aiLabelByUuidsApi, aiMarkLabelApi, aiUnmarkLabelApi } from '@/apis/ai';
 import { allhost } from '@/apis/host';
 import IpSourceProbeDialog from '@/pages/waf/host/components/IpSourceProbeDialog.vue';
 import { edit_system_config_api, get_detail_by_item_api } from '@/apis/systemconfig';
 import { get_ui_preference_api, save_ui_preference_api } from '@/apis/uipreference';
 import { ConvertStringToUnix, ConvertUnixToDate, NowDate } from '@/utils/date';
+import LogExportDialog from './components/LogExportDialog.vue';
 import { getOnlineUrl } from '@/utils/usuallytool';
 import { useAttackLogStore } from '@/store/modules/attacklog';
 
@@ -1148,14 +1120,7 @@ function openHostProbe() {
 // 主机昵称字典 host_code -> 纯昵称
 const host_nickname_dic = reactive<Record<string, string>>({});
 const share_db_dic = reactive<Record<string, string>>({});
-const exportDbVisible = ref(false);
-// 导出物=「按时间段导出选定层」的新 SQLite 文件（不再是整库备份）
-const exportForm = reactive<{ range: string[]; tiers: string[] }>({
-  range: [],
-  tiers: ['access', 'event', 'payload', 'weblog'],
-});
-// 当前是否为文件型数据库(SQLite)：仅 SQLite 支持日志文件导出，MySQL 隐藏导出按钮
-const isFileBasedDb = ref(true);
+const logExportDialog = ref<InstanceType<typeof LogExportDialog>>();
 const visitDetailVisible = ref(false); // 访问详情弹窗
 const visitDetailUid = ref(''); // 访问详情id
 
@@ -1601,8 +1566,8 @@ function tierLabel(tier: string): string {
   const m: Record<string, string> = {
     access_log: t('page.visit_log.view_access'),
     security_event: t('page.visit_log.view_event'),
-    event_payload: t('page.visit_log.export_tier_payload'),
-    web_logs: t('page.visit_log.export_tier_weblog'),
+    event_payload: t('logExport.payload'),
+    web_logs: t('logExport.legacyLogs'),
   };
   return m[tier] || tier;
 }
@@ -1672,7 +1637,6 @@ function loadShareDbList() {
     .then((res) => {
       if (res.code === 0) {
         const shareOptions = res.data;
-        let currentName = '';
         shardRows.value = shareOptions;
         const gLive = { label: t('page.visit_log.shard_group_live'), options: [] as Array<{ value: string; label: string }> };
         const gPeriod = { label: t('page.visit_log.shard_group_period'), options: [] as Array<{ value: string; label: string }> };
@@ -1685,7 +1649,6 @@ function loadShareDbList() {
           const opt = { value: it.file_name, label, disabled: !!it.missing };
           // 后端按驱动标记当前(实时)分片：SQLite=local_log.db，MySQL=web_logs
           if (it.is_current) {
-            currentName = it.file_name;
             gLive.options.push(opt);
           } else if (it.period_key) {
             gPeriod.options.push(opt);
@@ -1696,8 +1659,6 @@ function loadShareDbList() {
         shardGroups.value = [gLive, gPeriod, gLegacy].filter((g) => g.options.length > 0);
         // 默认停在「自动（按时间范围）」：分区由时间算出来，不再让用户自己猜
         // （旧默认是实时分片，会出现「日期选了上个月、分区停在实时 → 0 条」）
-        // 文件型(SQLite)实时分片名以 .db 结尾；MySQL 为 web_logs(无后缀)。据此决定是否显示导出按钮
-        isFileBasedDb.value = currentName === '' || currentName.endsWith('.db');
       }
     })
     .catch((e: Error) => {
@@ -1795,42 +1756,8 @@ function getList(keyword?: string) {
     });
 }
 
-// 打开导出弹窗：默认最近 4 小时（每次打开重算，clearable 清空仍是「全部」）。
-// 全空默认=导全部，历史分区大时一次导出几个 GB 还占满带宽
 function openExportDialog() {
-  const now = Date.now();
-  exportForm.range = [ConvertUnixToDate(now - 4 * 3600 * 1000), ConvertUnixToDate(now)];
-  exportDbVisible.value = true;
-}
-
-function handelExport() {
-  if (exportForm.tiers.length === 0) {
-    MessagePlugin.warning(t('page.visit_log.export_tiers'));
-    return;
-  }
-  exportlog({
-    start_time: (exportForm.range && exportForm.range[0]) || '',
-    end_time: (exportForm.range && exportForm.range[1]) || '',
-    tiers: exportForm.tiers.join(','),
-  })
-    .then((res) => {
-      if (res.code === 0) {
-        MessagePlugin.success(t('page.visit_log.export_started'));
-      } else if (res.code === -7) {
-        // 导出被 export_download 配置关闭：给出「如何开启」指引而不是一句报错
-        DialogPlugin({
-          theme: 'warning',
-          header: t('page.visit_log.export_disabled_title'),
-          body: t('page.visit_log.export_disabled_body'),
-          confirmBtn: t('common.confirm'),
-        });
-      } else {
-        MessagePlugin.error(res.msg || t('page.visit_log.export_db_file_header'));
-      }
-    })
-    .catch((e: Error) => {
-      console.log(e);
-    });
+  logExportDialog.value?.open();
 }
 
 function rehandlePageChange(curr: PageInfo) {
