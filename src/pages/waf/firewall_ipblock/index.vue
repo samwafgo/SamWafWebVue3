@@ -21,13 +21,6 @@
         </div>
         <div class="right-operation-container">
           <t-form :data="searchformData" :label-width="80" layout="inline" colon :style="{ marginBottom: '8px' }">
-            <t-form-item :label="t('page.firewall_ipblock.label_website')" name="host_code">
-              <t-select v-model="searchformData.host_code" clearable filterable :style="{ width: '150px' }">
-                <t-option v-for="(item, index) in host_dic" :key="index" :value="index" :label="item">
-                  {{ item }}
-                </t-option>
-              </t-select>
-            </t-form-item>
             <t-form-item label="IP" name="ip">
               <t-input v-model="searchformData.ip" class="search-input" clearable />
             </t-form-item>
@@ -125,10 +118,6 @@
           @page-change="rehandlePageChange"
           @select-change="rehandleSelectChange"
         >
-          <template #host_code="{ row }">
-            <span>{{ host_dic[row.host_code] }}</span>
-          </template>
-
           <template #status="{ row }">
             <t-tag v-if="row.status === 'active'" theme="success" variant="light">
               {{ t('page.firewall_ipblock.status_active') }}
@@ -186,13 +175,6 @@
     <!-- 添加对话框 -->
     <t-dialog v-model:visible="addFormVisible" :header="t('common.new')" :width="680" :footer="false">
       <t-form :data="formData" :rules="rules" :label-width="120" @submit="onSubmit">
-        <t-form-item :label="t('page.firewall_ipblock.label_website')" name="host_code">
-          <t-select v-model="formData.host_code" clearable filterable :style="{ width: '480px' }">
-            <t-option v-for="(item, index) in host_dic" :key="index" :value="index" :label="item">
-              {{ item }}
-            </t-option>
-          </t-select>
-        </t-form-item>
         <t-form-item :label="t('page.firewall_ipblock.label_ip')" name="ip">
           <t-input v-model="formData.ip" :style="{ width: '480px' }" :placeholder="t('page.firewall_ipblock.ip_placeholder')" />
         </t-form-item>
@@ -228,13 +210,6 @@
     <!-- 批量添加对话框 -->
     <t-dialog v-model:visible="batchAddFormVisible" :header="t('page.firewall_ipblock.batch_add_title')" :width="680" :footer="false">
       <t-form :data="batchAddFormData" :rules="batchAddRules" :label-width="120" @submit="onSubmitBatchAdd">
-        <t-form-item :label="t('page.firewall_ipblock.label_website')" name="host_code">
-          <t-select v-model="batchAddFormData.host_code" clearable filterable :style="{ width: '480px' }">
-            <t-option v-for="(item, index) in host_dic" :key="index" :value="index" :label="item">
-              {{ item }}
-            </t-option>
-          </t-select>
-        </t-form-item>
         <t-form-item :label="t('page.firewall_ipblock.label_ips')" name="ips_text">
           <t-textarea
             v-model="batchAddFormData.ips_text"
@@ -266,13 +241,6 @@
     <!-- 编辑对话框 -->
     <t-dialog v-model:visible="editFormVisible" :header="t('common.edit')" :width="680" :footer="false">
       <t-form :data="formEditData" :rules="rules" :label-width="120" @submit="onSubmitEdit">
-        <t-form-item :label="t('page.firewall_ipblock.label_website')" name="host_code">
-          <t-select v-model="formEditData.host_code" clearable :style="{ width: '480px' }">
-            <t-option v-for="(item, index) in host_dic" :key="index" :value="index" :label="item">
-              {{ item }}
-            </t-option>
-          </t-select>
-        </t-form-item>
         <t-form-item :label="t('page.firewall_ipblock.label_ip')" name="ip">
           <t-input v-model="formEditData.ip" :style="{ width: '480px' }" />
         </t-form-item>
@@ -340,7 +308,6 @@ import { useI18n } from 'vue-i18n';
 import { MessagePlugin, type FormProps, type PageInfo, type TableProps } from 'tdesign-vue-next';
 import { ChevronRightIcon } from 'tdesign-icons-vue-next';
 import { getOnlineUrl } from '@/utils/usuallytool';
-import { allhost } from '@/apis/host';
 import { wafThreatIPLandedSummaryApi } from '@/apis/threatip';
 import ThreatSubSourcePanel from '@/pages/waf/threatip/components/ThreatSubSourcePanel.vue';
 import {
@@ -360,7 +327,6 @@ import {
 } from '@/apis/firewall_ipblock';
 
 const INITIAL_DATA = {
-  host_code: '',
   ip: '',
   reason: '',
   block_type: 'manual',
@@ -370,7 +336,6 @@ const INITIAL_DATA = {
 };
 
 const BATCH_ADD_INITIAL_DATA = {
-  host_code: '',
   ips_text: '',
   reason: '',
   block_type: 'manual',
@@ -389,13 +354,11 @@ const batchAddFormData = ref<Record<string, any>>({ ...BATCH_ADD_INITIAL_DATA })
 const formEditData = ref<Record<string, any>>({ ...INITIAL_DATA });
 
 const rules: FormProps['rules'] = {
-  host_code: [{ required: true, message: t('common.placeholder') + t('page.firewall_ipblock.label_website'), type: 'error' }],
   ip: [{ required: true, message: t('common.placeholder') + t('page.firewall_ipblock.label_ip'), type: 'error' }],
   block_type: [{ required: true, message: t('common.placeholder') + t('page.firewall_ipblock.label_block_type'), type: 'error' }],
 };
 
 const batchAddRules: FormProps['rules'] = {
-  host_code: [{ required: true, message: t('common.placeholder') + t('page.firewall_ipblock.label_website'), type: 'error' }],
   ips_text: [{ required: true, message: t('common.placeholder') + t('page.firewall_ipblock.label_ips'), type: 'error' }],
 };
 
@@ -415,7 +378,6 @@ const clearExpiredConfirmVisible = ref(false);
 
 const columns = computed<TableProps['columns']>(() => [
   { colKey: 'row-select', type: 'multiple', width: 64, fixed: 'left' },
-  { title: t('page.firewall_ipblock.label_website'), align: 'left', width: 200, ellipsis: true, colKey: 'host_code' },
   { title: t('page.firewall_ipblock.label_ip'), width: 150, ellipsis: true, colKey: 'ip' },
   { title: t('page.firewall_ipblock.label_reason'), width: 150, ellipsis: true, colKey: 'reason' },
   { title: t('page.firewall_ipblock.label_block_type'), width: 120, ellipsis: true, colKey: 'block_type' },
@@ -430,13 +392,11 @@ const pagination = reactive({ total: 0, current: 1, pageSize: 10 });
 
 const searchformData = reactive({
   ip: '',
-  host_code: '',
   status: '',
   block_type: '',
 });
 
 const deleteIdx = ref(-1);
-const host_dic = ref<Record<string, string>>({});
 
 const confirmBody = computed(() => {
   if (deleteIdx.value > -1) {
@@ -444,24 +404,6 @@ const confirmBody = computed(() => {
   }
   return '';
 });
-
-function loadHostList() {
-  return new Promise<void>((resolve, reject) => {
-    allhost()
-      .then((res) => {
-        if (res.code === 0) {
-          (res.data as { value: string; label: string }[]).forEach((item) => {
-            host_dic.value[item.value] = item.label;
-          });
-        }
-        resolve();
-      })
-      .catch((e: Error) => {
-        console.log(e);
-        reject(e);
-      });
-  });
-}
 
 function getList() {
   dataLoading.value = true;
@@ -544,6 +486,7 @@ const onSubmit: FormProps['onSubmit'] = ({ firstError }) => {
     postdata.expire_time = 0;
   }
   delete postdata.expire_time_date;
+  delete postdata.host_code;
 
   wafFirewallIPBlockAddApi(postdata)
     .then((res) => {
@@ -577,7 +520,6 @@ const onSubmitBatchAdd: FormProps['onSubmit'] = ({ firstError }) => {
   }
 
   wafFirewallIPBlockBatchAddApi({
-    host_code: batchAddFormData.value.host_code,
     ips,
     reason: batchAddFormData.value.reason,
     block_type: batchAddFormData.value.block_type,
@@ -609,6 +551,7 @@ const onSubmitEdit: FormProps['onSubmit'] = ({ firstError }) => {
     postdata.expire_time = 0;
   }
   delete postdata.expire_time_date;
+  delete postdata.host_code;
 
   wafFirewallIPBlockEditApi(postdata)
     .then((res) => {
@@ -712,7 +655,7 @@ function onConfirmBatchDelete() {
 }
 
 function handleSync() {
-  wafFirewallIPBlockSyncApi({ host_code: searchformData.host_code })
+  wafFirewallIPBlockSyncApi({})
     .then((res) => {
       if (res.code === 0) {
         MessagePlugin.success(res.msg);
@@ -822,10 +765,8 @@ function handleJumpOnlineUrl() {
 
 onMounted(() => {
   getCapability();
-  loadHostList().then(() => {
-    getList();
-    getStatistics();
-  });
+  getList();
+  getStatistics();
   loadSubLandedTotal();
 });
 </script>

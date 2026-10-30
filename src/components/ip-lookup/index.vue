@@ -173,13 +173,6 @@
                       <t-option v-for="(name, code) in hostDic" :key="code" :value="code" :label="name" />
                     </t-select>
                   </t-form-item>
-                  <t-form-item v-if="isBlockMode" :label="t('common.ip_lookup.block_layer')">
-                    <t-select v-model="allowForm.target_layer" :style="{ width: '100%' }">
-                      <t-option value="waf" :label="t('common.ip_lookup.layer_waf')" />
-                      <t-option value="system" :label="t('common.ip_lookup.layer_system')" />
-                      <t-option value="both" :label="t('common.ip_lookup.layer_both')" />
-                    </t-select>
-                  </t-form-item>
                   <t-form-item :label="isBlockMode ? t('common.ip_lookup.block_reason') : t('common.ip_lookup.allow_reason')">
                     <t-textarea
                       v-model="allowForm.remarks"
@@ -278,7 +271,7 @@ const globalHostCode = ref('');
 // '' = 只显示按钮；'allow'/'block' = 展开对应表单
 const actionMode = ref('');
 const allowLoading = ref(false);
-const allowForm = reactive({ host_code: '', remarks: '', target_layer: 'waf' });
+const allowForm = reactive({ host_code: '', remarks: '' });
 // 威胁情报误报排除表单
 const excludeVisible = ref(false);
 const excludeSaving = ref(false);
@@ -535,11 +528,11 @@ function openActionForm(mode: string) {
   actionMode.value = mode;
   allowForm.host_code = globalHostCode.value;
   allowForm.remarks = buildReason(mode);
-  allowForm.target_layer = 'waf';
   loadHostDic();
 }
 
 function doAction() {
+  if (allowLoading.value) return;
   const remarks = (allowForm.remarks || '').trim();
   if (!remarks) {
     MessagePlugin.warning(t('common.ip_lookup.allow_reason_required'));
@@ -558,7 +551,6 @@ function doAction() {
     ip_type: 'ip',
     group_code: '',
   };
-  if (block) payload.target_layer = allowForm.target_layer;
 
   allowLoading.value = true;
   (block ? wafIPBlockAddApi(payload) : wafIPWhiteAddApi(payload))

@@ -82,7 +82,7 @@
     <t-dialog v-model:visible="addFormVisible" :header="t('common.new')" :width="680" :footer="false">
       <t-form :data="formData" :rules="rules" :label-width="100" @submit="onSubmit">
         <t-form-item :label="t('page.ipblock.label_website')" name="host_code">
-          <t-select v-model="formData.host_code" clearable filterable :style="{ width: '480px' }" @change="onHostChange">
+          <t-select v-model="formData.host_code" clearable filterable :style="{ width: '480px' }">
             <t-option v-for="(item, index) in host_dic" :key="index" :value="index" :label="item">
               {{ item }}
             </t-option>
@@ -111,30 +111,21 @@
             {{ t('page.ipblock.goto_group_manage') }}
           </a>
         </t-form-item>
-        <t-form-item name="target_layer">
-          <template #label>
-            <span>{{ t('page.ipblock.label_target_layer') }}</span>
-            <t-tooltip :content="t('page.ipblock.target_layer_tips')" placement="top" :overlay-style="{ width: '300px' }" show-arrow>
-              <t-icon name="help-circle" style="margin-left: 4px; cursor: pointer" />
-            </t-tooltip>
-          </template>
-          <t-select v-model="formData.target_layer" :style="{ width: '480px' }">
-            <t-option value="waf" :label="t('page.ipblock.target_layer_waf')" />
-            <t-option value="system" :label="t('page.ipblock.target_layer_system')" :disabled="systemLayerDisabled" />
-            <t-option value="both" :label="t('page.ipblock.target_layer_both')" :disabled="systemLayerDisabled" />
-          </t-select>
-          <div v-if="systemLayerDisabled" class="form-tips">{{ t('page.ipblock.system_layer_unsupported') }}</div>
-          <div v-if="recommendReason" style="margin-top: 4px; font-size: 12px; color: var(--td-text-color-secondary)">{{ recommendReason }}</div>
-        </t-form-item>
         <t-form-item :label="t('page.ipblock.col_enable')" name="is_enable">
           <t-switch v-model="formData.is_enable" :custom-value="[1, 0]" />
         </t-form-item>
         <t-form-item :label="t('common.remarks')" name="remarks">
           <t-textarea v-model="formData.remarks" :style="{ width: '480px' }" name="remarks" />
         </t-form-item>
+        <div class="form-tips" style="margin: 0 0 8px">
+          {{ t('page.ipblock.system_layer_hint') }}
+          <a class="t-button-link" style="display: inline" @click="router.push({ name: 'WafFirewallIPBlock' })">
+            {{ t('page.ipblock.goto_firewall_ipblock') }}
+          </a>
+        </div>
         <t-form-item style="float: right">
-          <t-button variant="outline" @click="onClickCloseBtn">{{ t('common.close') }}</t-button>
-          <t-button theme="primary" type="submit">{{ t('common.confirm') }}</t-button>
+          <t-button variant="outline" :disabled="blockSubmitting" @click="onClickCloseBtn">{{ t('common.close') }}</t-button>
+          <t-button theme="primary" type="submit" :loading="blockSubmitting">{{ t('common.confirm') }}</t-button>
         </t-form-item>
       </t-form>
     </t-dialog>
@@ -175,8 +166,8 @@
           <t-textarea v-model="formEditData.remarks" :style="{ width: '480px' }" name="remarks" />
         </t-form-item>
         <t-form-item style="float: right">
-          <t-button variant="outline" @click="onClickCloseEditBtn">{{ t('common.close') }}</t-button>
-          <t-button theme="primary" type="submit">{{ t('common.confirm') }}</t-button>
+          <t-button variant="outline" :disabled="blockSubmitting" @click="onClickCloseEditBtn">{{ t('common.close') }}</t-button>
+          <t-button theme="primary" type="submit" :loading="blockSubmitting">{{ t('common.confirm') }}</t-button>
         </t-form-item>
       </t-form>
     </t-dialog>
@@ -210,11 +201,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
-import { MessagePlugin, type FormProps, type PageInfo, type TableProps } from 'tdesign-vue-next';
-import { getOnlineUrl } from '@/utils/usuallytool';
+import { DialogPlugin, MessagePlugin, type FormProps, type PageInfo, type TableProps } from 'tdesign-vue-next';
 import { allhost } from '@/apis/host';
 import { export_api } from '@/apis/common';
 import {
@@ -226,7 +216,6 @@ import {
   wafIPBlockBatchDelApi,
   wafIPBlockDelAllApi,
   wafIPBlockToggleApi,
-  wafIPBlockRecommendLayerApi,
 } from '@/apis/ipblock';
 import { wafIPGroupOptionsApi } from '@/apis/ipgroup';
 import ThreatSubSourcePanel from '@/pages/waf/threatip/components/ThreatSubSourcePanel.vue';
@@ -237,8 +226,6 @@ const INITIAL_DATA = {
   remarks: '',
   ip_type: 'ip',
   group_code: '',
-  // 封禁层级默认 WAF 应用层；不随站点推荐自动改选中值（推荐仅展示理由）
-  target_layer: 'waf',
   is_enable: 1,
 };
 
@@ -252,8 +239,7 @@ const batchDeleteConfirmVisible = ref(false);
 const clearAllConfirmVisible = ref(false);
 const formData = ref<Record<string, any>>({ ...INITIAL_DATA });
 const formEditData = ref<Record<string, any>>({ ...INITIAL_DATA });
-// 推荐封禁层级的理由文案（仅提示，不改变默认选中）
-const recommendReason = ref('');
+const blockSubmitting = ref(false);
 const activeSourceTab = ref('manual');
 const subPanel = ref();
 
@@ -313,22 +299,6 @@ function groupLabel(groupCode: string) {
   const g = group_options.value.find((x) => x.group_code === groupCode);
   return g ? `${g.group_name} (${g.item_count})` : groupCode;
 }
-
-// 系统防火墙(iptables/netsh)只认单IP与CIDR，通配符/区间/IP组都表达不了。
-// 这里只是前端体验层的拦截，后端还会再挡一次。
-const systemLayerDisabled = computed(() => {
-  if (formData.value.ip_type === 'group') {
-    return true;
-  }
-  return /[*\-]/.test(formData.value.ip || '');
-});
-
-// 切到不支持系统层的写法时，把已选的层级拉回 WAF 应用层，避免提交时才报错
-watch(systemLayerDisabled, (disabled) => {
-  if (disabled && formData.value.target_layer !== 'waf') {
-    formData.value.target_layer = 'waf';
-  }
-});
 
 const dataLoading = ref(false);
 const data = ref<Record<string, any>[]>([]);
@@ -433,21 +403,6 @@ function onSourceTabChange(val: string) {
   }
 }
 
-// 站点变化时展示后端推荐理由供参考；默认层级保持 WAF，不自动改选中值
-function onHostChange(hostCode: string) {
-  if (!hostCode) {
-    recommendReason.value = '';
-    return;
-  }
-  wafIPBlockRecommendLayerApi({ host_code: hostCode })
-    .then((res) => {
-      if (res.code === 0 && res.data) {
-        recommendReason.value = res.data.reason || '';
-      }
-    })
-    .catch((e: Error) => console.log(e));
-}
-
 function handleClickEdit(e: { row: Record<string, any> }) {
   editFormVisible.value = true;
   getDetail(e.row.id);
@@ -456,51 +411,69 @@ function handleClickEdit(e: { row: Record<string, any> }) {
 function handleAddIpBlock() {
   addFormVisible.value = true;
   formData.value = { ...INITIAL_DATA };
-  recommendReason.value = '';
   loadGroupOptions();
 }
 
-const onSubmit: FormProps['onSubmit'] = ({ firstError }) => {
-  if (!firstError) {
-    wafIPBlockAddApi({ ...formData.value })
-      .then((res) => {
-        if (res.code === 0) {
-          MessagePlugin.success(res.msg);
-          addFormVisible.value = false;
-          pagination.current = 1;
-          getList();
-        } else {
-          MessagePlugin.warning(res.msg);
-        }
-      })
-      .catch((e: Error) => console.log(e));
-  } else {
-    MessagePlugin.warning(firstError);
+async function submitBlockEntry(postdata: Record<string, any>, editing: boolean) {
+  if (blockSubmitting.value) return;
+  blockSubmitting.value = true;
+  try {
+    const submit = editing ? wafIPBlockEditApi : wafIPBlockAddApi;
+    const payload: Record<string, any> = { ...postdata, confirm_block_all: false };
+    delete payload.target_layer;
+    let res = await submit(payload);
+    if (res.code === -8) {
+      const host = host_dic.value[payload.host_code] || payload.host_code;
+      const accepted = await new Promise<boolean>((resolve) => {
+        const dialog = DialogPlugin.confirm({
+          header: t('page.ipblock.block_all_confirm_title'),
+          body: t('page.ipblock.block_all_confirm_body', { host, ip: payload.ip }),
+          confirmBtn: t('page.ipblock.block_all_confirm_save'),
+          cancelBtn: t('common.cancel'),
+          onConfirm: () => { dialog.destroy(); resolve(true); },
+          onClose: () => { dialog.destroy(); resolve(false); },
+          onCancel: () => { dialog.destroy(); resolve(false); },
+        });
+      });
+      if (!accepted) return;
+      res = await submit({ ...payload, confirm_block_all: true });
+    }
+    if (res.code !== 0) {
+      MessagePlugin.warning(res.msg);
+      return;
+    }
+    MessagePlugin.success(res.msg);
+    if (editing) {
+      editFormVisible.value = false;
+    } else {
+      addFormVisible.value = false;
+      pagination.current = 1;
+    }
+    getList();
+  } finally {
+    blockSubmitting.value = false;
   }
+}
+
+const onSubmit: FormProps['onSubmit'] = ({ firstError }) => {
+  if (firstError) {
+    MessagePlugin.warning(firstError);
+    return;
+  }
+  submitBlockEntry(formData.value, false).catch((e: Error) => console.log(e));
 };
 
 const onSubmitEdit: FormProps['onSubmit'] = ({ firstError }) => {
-  if (!firstError) {
-    wafIPBlockEditApi({ ...formEditData.value })
-      .then((res) => {
-        if (res.code === 0) {
-          MessagePlugin.success(res.msg);
-          editFormVisible.value = false;
-          getList();
-        } else {
-          MessagePlugin.warning(res.msg);
-        }
-      })
-      .catch((e: Error) => console.log(e));
-  } else {
+  if (firstError) {
     MessagePlugin.warning(firstError);
+    return;
   }
+  submitBlockEntry(formEditData.value, true).catch((e: Error) => console.log(e));
 };
 
 function onClickCloseBtn() {
   addFormVisible.value = false;
   formData.value = { ...INITIAL_DATA };
-  recommendReason.value = '';
 }
 
 function onClickCloseEditBtn() {
