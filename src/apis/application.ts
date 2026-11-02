@@ -65,6 +65,10 @@ export function wafAppNetStatsApi(params: Record<string, any>) {
 export function wafAppChangeLogsApi(params: Record<string, any>) {
   return request({ url: '/application/app/changelogs', method: 'post', data: params });
 }
+// 工作目录预检：解析服务端实际路径/允许范围/相对基准（旧后端无此接口，返回 404）
+export function wafAppDirPreviewApi(params: Record<string, any>) {
+  return request({ url: '/application/app/directory_preview', method: 'post', data: params, background: true });
+}
 
 /** 验证操作密码是否正确（先验证再保存，避免错误密码存入 session） */
 export function wafAppVerifyPwdApi(pwd: string) {
@@ -92,13 +96,25 @@ export function wafAppRestartApi(params: Record<string, any>) {
 }
 
 /**
- * 返回带 op password header 的 request 配置，供 AppUpgrade 直接 request()
- * opPwd 优先使用显式传入值，fallback 到 sessionStorage
+ * 返回带 op password header 的 request 配置，供 AppUpgrade/AppForm 直接 request()
+ * opPwd 优先使用显式传入值，fallback 到 sessionStorage；onUploadProgress 可选（上传进度回调）
  */
-export function buildUploadConfig(url: string, data: any, timeout: number, opPwd?: string): Record<string, any> {
+export function buildUploadConfig(
+  url: string,
+  data: any,
+  timeout: number,
+  opPwd?: string,
+  onUploadProgress?: (percent: number) => void,
+): Record<string, any> {
   const pwd = opPwd || getAppOpPassword();
   const headers: Record<string, string> = pwd ? { 'X-App-Op-Password': pwd } : {};
-  return { url, method: 'post', data, timeout, headers };
+  const config: Record<string, any> = { url, method: 'post', data, timeout, headers };
+  if (onUploadProgress) {
+    config.onUploadProgress = (e: any) => {
+      if (e && e.total) onUploadProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)));
+    };
+  }
+  return config;
 }
 
 export function buildRollbackConfig(params: Record<string, any>, opPwd?: string): Record<string, any> {

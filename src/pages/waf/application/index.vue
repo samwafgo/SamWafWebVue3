@@ -235,6 +235,7 @@ import AppLogs from './components/AppLogs.vue';
 import AppUpgrade from './components/AppUpgrade.vue';
 import AppNetwork from './components/AppNetwork.vue';
 import AppChangeLog from './components/AppChangeLog.vue';
+import { decideStartPoll } from './components/appFlow';
 
 const { t } = useI18n();
 
@@ -474,26 +475,40 @@ function onCancel() {
   confirmVisible.value = false;
 }
 
-function pollUntilStatus(code: string, targetStatus: number, initialDelayMs: number, maxWaitMs: number) {
+function pollUntilStatus(code: string, targetStatus: number, initialDelayMs: number, maxWaitMs: number, attemptStartMs: number | null = null) {
   const deadline = Date.now() + maxWaitMs;
   const poll = () => {
-    if (Date.now() >= deadline) {
-      actingCode.value = '';
-      getList();
-      return;
-    }
     wafAppStatusApi({ code })
       .then((res) => {
-        if (res && res.code === 0 && res.data.run_status === targetStatus) {
-          actingCode.value = '';
-          getList();
-        } else {
+        const decision = decideStartPoll(res && res.data, targetStatus, attemptStartMs, Date.now(), deadline);
+        if (decision.kind === 'pending') {
           setTimeout(poll, 1000);
+          return;
+        }
+        actingCode.value = '';
+        getList();
+        if (decision.kind === 'timeout') {
+          MessagePlugin.warning(t('page.application.start_unconfirmed'));
+        } else if (decision.kind === 'failed') {
+          MessagePlugin.error(
+            decision.error
+              ? t('page.application.start_failed_detail', {
+                  error: decision.error,
+                  time: decision.time ? `（${decision.time}）` : '',
+                })
+              : t('page.application.start_failed_generic'),
+          );
         }
       })
       .catch(() => {
-        actingCode.value = '';
-        getList();
+        // 单次状态查询失败不终止轮询，由 deadline 兜底；到点仍未确认则明确提示
+        if (Date.now() >= deadline) {
+          actingCode.value = '';
+          getList();
+          MessagePlugin.warning(t('page.application.start_unconfirmed'));
+        } else {
+          setTimeout(poll, 1000);
+        }
       });
   };
   setTimeout(poll, initialDelayMs);
@@ -503,11 +518,12 @@ function handleStart(slotProps: { row: Record<string, any> }) {
   const { code } = slotProps.row;
   ensureOpPassword(() => {
     actingCode.value = code;
+    const attemptStartMs = Date.now();
     wafAppStartApi({ code })
       .then((res) => {
         if (res && res.code === 0) {
           MessagePlugin.success(t('page.application.start_sent'));
-          pollUntilStatus(code, 1, 800, 30000);
+          pollUntilStatus(code, 1, 800, 30000, attemptStartMs);
         } else {
           actingCode.value = '';
         }
@@ -539,11 +555,12 @@ function handleRestart(slotProps: { row: Record<string, any> }) {
   const { code } = slotProps.row;
   ensureOpPassword(() => {
     actingCode.value = code;
+    const attemptStartMs = Date.now();
     wafAppRestartApi({ code })
       .then((res) => {
         if (res && res.code === 0) {
           MessagePlugin.success(t('page.application.restart_sent'));
-          pollUntilStatus(code, 1, 3000, 60000);
+          pollUntilStatus(code, 1, 3000, 60000, attemptStartMs);
         } else {
           actingCode.value = '';
         }
