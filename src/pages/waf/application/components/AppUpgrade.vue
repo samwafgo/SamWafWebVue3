@@ -197,7 +197,7 @@ async function doUpload() {
 
     const res = await request(buildUploadConfig(url, fd, timeout, props.opPassword) as any);
     if (res && res.code === 0) {
-      MessagePlugin.success(t('common.success'));
+      MessagePlugin.success(res.msg || t('common.success'));
       loadBackups();
       emit('done');
     } else {
@@ -229,7 +229,7 @@ function doRollback(filename: string) {
     })
     .then((res) => {
       if (res && res.code === 0) {
-        MessagePlugin.success(t('page.application.rollback_success'));
+        MessagePlugin.success(res.msg || t('page.application.rollback_success'));
         emit('done');
       } else {
         MessagePlugin.error(res ? res.msg : t('common.failed'));

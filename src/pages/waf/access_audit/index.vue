@@ -42,7 +42,7 @@
           </t-form>
         </div>
       </t-row>
-      <help-block :summary="t('page.access.audit.alert_message')" doc="guide/AccessAudit" />
+      <help-block :summary="t('page.access.audit.alert_message') + ' ' + t('page.access.audit.app_audit_note')" doc="guide/AccessAudit" />
       <div class="table-container">
         <t-table
           :columns="columns"
@@ -83,7 +83,7 @@ import { useI18n } from 'vue-i18n';
 import { MessagePlugin, type PageInfo, type TableProps } from 'tdesign-vue-next';
 import { wafAccessAuditListApi } from '@/apis/access';
 
-// 与后端 model/access_audit_log.go 的 AccessEvent* 常量一一对应
+// 与后端 model/security_audit_log.go 的审计事件常量对应
 const EVENTS = [
   'login_ok',
   'login_fail',
@@ -106,15 +106,26 @@ const EVENTS = [
   'httpauth_kick',
   'httpauth_expired',
   'httpauth_denied',
+  'app_add',
+  'app_edit',
+  'app_del',
+  'app_start',
+  'app_stop',
+  'app_restart',
+  'app_upload',
+  'app_upgrade',
+  'app_rollback',
+  'app_clear_logs',
+  'app_op_denied',
 ];
 
 // 审计分类，与后端 AuditCategory* 常量对应
-const CATEGORIES = ['access', 'httpauth', 'config'];
+const CATEGORIES = ['access', 'httpauth', 'config', 'app'];
 
 // 安全告警级事件用 danger 高亮：票据重放与回跳地址异常在正常流程里不该出现，
 // 一旦出现就意味着有人在主动构造请求。
 const DANGER_EVENTS = ['ticket_replay', 'bad_return_to', 'locked', 'httpauth_locked'];
-const WARNING_EVENTS = ['login_fail', 'otp_fail', 'denied', 'httpauth_login_fail', 'httpauth_denied'];
+const WARNING_EVENTS = ['login_fail', 'otp_fail', 'denied', 'httpauth_login_fail', 'httpauth_denied', 'app_op_denied'];
 
 const { t } = useI18n();
 
