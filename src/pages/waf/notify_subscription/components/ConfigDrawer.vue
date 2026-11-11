@@ -152,6 +152,12 @@
                 <div class="form-tip">{{ t('page.notify_subscription.filter_exclude_ips_tip') }}</div>
               </div>
             </t-form-item>
+            <t-form-item :label="t('page.notify_subscription.label_filter_exclude_rules')">
+              <div style="width: 100%">
+                <t-textarea v-model="filterText.exclude_rules" :placeholder="excludeRulesPlaceholder" :autosize="{ minRows: 3, maxRows: 6 }" />
+                <div class="form-tip">{{ t('page.notify_subscription.filter_exclude_rules_tip') }}</div>
+              </div>
+            </t-form-item>
             <t-form-item :label="t('page.notify_subscription.label_filter_keywords')">
               <div style="width: 100%">
                 <t-textarea v-model="filterText.keywords" :autosize="{ minRows: 3, maxRows: 6 }" />
@@ -262,6 +268,7 @@ function emptyForm() {
     filter: {
       domains: [] as string[],
       exclude_ips: [] as string[],
+      exclude_rules: [] as string[],
       keywords: [] as string[],
       min_severity: '',
     },
@@ -274,10 +281,11 @@ const innerVisible = ref(false);
 const activeTab = ref('throttle');
 const form = ref(emptyForm());
 // 多行文本 ↔ 数组：过滤条件用文本框填更顺手，提交前再切成数组
-const filterText = ref({ domains: '', exclude_ips: '', keywords: '' });
+const filterText = ref({ domains: '', exclude_ips: '', exclude_rules: '', keywords: '' });
 // 换行只能从 JS 传：写在模板的 placeholder 属性里会被当成字面量 &#10; 显示出来
 const domainsPlaceholder = 'www.example.com\n*.example.com';
 const excludeIpsPlaceholder = '10.0.0.0/8\n192.168.1.1';
+const excludeRulesPlaceholder = '禁止国外IP访问';
 const cooldownStepsText = ref('');
 const templateVars = ref<Record<string, any>[]>([]);
 const defaultTitle = ref('');
@@ -331,6 +339,7 @@ function loadFromSubscription() {
   filterText.value = {
     domains: (next.filter.domains || []).join('\n'),
     exclude_ips: (next.filter.exclude_ips || []).join('\n'),
+    exclude_rules: (next.filter.exclude_rules || []).join('\n'),
     keywords: (next.filter.keywords || []).join('\n'),
   };
   preview.value = { title: '', content: '', is_fallback: false };
@@ -386,6 +395,7 @@ function buildPayload() {
     filter: {
       domains: splitLines(filterText.value.domains),
       exclude_ips: splitLines(filterText.value.exclude_ips),
+      exclude_rules: splitLines(filterText.value.exclude_rules),
       keywords: splitLines(filterText.value.keywords),
       min_severity: form.value.filter.min_severity || '',
     },
