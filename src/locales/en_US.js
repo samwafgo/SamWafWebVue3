@@ -6,9 +6,11 @@
  * page - Fields for specific functional pages
  */
 import { en as logExport } from './logExport';
+import { en as securityReport } from './securityReport';
 
 export default {
   logExport,
+  securityReport,
   common: {
     yes: "Yes",
     no: "No",
@@ -5237,7 +5239,9 @@ section_cors: "Cross-origin access (CORS)",
       message_type_operation_notice: "Operation Notice",
       message_type_user_login: "User Login",
       message_type_attack_info: "Attack Info",
+      message_type_daily_report: "Daily Report",
       message_type_weekly_report: "Weekly Report",
+      message_type_monthly_report: "Monthly Report",
       message_type_ssl_expire: "SSL Certificate Expire",
       message_type_system_error: "System Error",
       message_type_ip_ban: "IP Ban",
@@ -5389,7 +5393,9 @@ section_cors: "Cross-origin access (CORS)",
       message_type_operation_notice: "Operation Notice",
       message_type_user_login: "User Login",
       message_type_attack_info: "Attack Info",
+      message_type_daily_report: "Daily Report",
       message_type_weekly_report: "Weekly Report",
+      message_type_monthly_report: "Monthly Report",
       message_type_ssl_expire: "SSL Certificate Expire",
       message_type_system_error: "System Error",
       message_type_ip_ban: "IP Ban",

@@ -225,7 +225,9 @@ const messageTypes = computed(() => [
   { type: 'ip_ban', name: t('page.notify_subscription.message_type_ip_ban') },
   { type: 'attack_info', name: t('page.notify_subscription.message_type_attack_info') },
   { type: 'ssl_expire', name: t('page.notify_subscription.message_type_ssl_expire') },
+  { type: 'daily_report', name: t('page.notify_subscription.message_type_daily_report') },
   { type: 'weekly_report', name: t('page.notify_subscription.message_type_weekly_report') },
+  { type: 'monthly_report', name: t('page.notify_subscription.message_type_monthly_report') },
   { type: 'system_error', name: t('page.notify_subscription.message_type_system_error') },
   { type: 'operation_notice', name: t('page.notify_subscription.message_type_operation_notice') },
   // 统一访问认证拆成两类：登录成功是日常告知，异常是安全告警。
