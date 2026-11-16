@@ -97,6 +97,14 @@
                 </t-select>
               </t-form-item>
             </t-col>
+            <t-col :span="6">
+              <t-form-item label="同类安全事件折叠" name="log_fold_per_minute">
+                <t-input-number v-model="logConfig.log_fold_per_minute" style="width: 100%" :min="0" />
+                <div class="log-config-hint">
+                  同一「站点+IP+规则」每分钟最多落库的完整明细条数（0=不折叠，默认0；攻击高发时可设5）。超出的不落明细但计数、封禁与文件/Kafka 出口照常
+                </div>
+              </t-form-item>
+            </t-col>
           </t-row>
 
           <t-row :gutter="16">
@@ -1138,6 +1146,7 @@ const logConfig = ref<Record<string, any>>({
   db_file_size: '0',
   log_persist_enable: '0',
   batch_insert: '0',
+  log_fold_per_minute: '0',
   ip_tag_db: '0',
   access_log_mode: 'db',
   access_log_retention_days: '30',
@@ -1898,6 +1907,7 @@ const LOG_CONFIG_KEYS = [
   'db_file_size',
   'log_persist_enable',
   'batch_insert',
+  'log_fold_per_minute',
   'ip_tag_db',
   'access_log_mode',
   'access_log_retention_days',
