@@ -47,8 +47,16 @@ export function wafBlockingPageDetailApi(params: Record<string, any>) {
 
 /** 拦截页面 - 未匹配网站内置页面（预览用） */
 export function wafBlockingPageUnmatchedBuiltinApi() {
-  return request({
+  return request<string>({
     url: '/wafhost/blockingpage/unmatchedbuiltin',
+    method: 'get',
+  });
+}
+
+/** 拦截页面 - 源站不可用内置页面（预览用） */
+export function wafBlockingPageBackendUnavailableBuiltinApi() {
+  return request<string>({
+    url: '/wafhost/blockingpage/backendunavailablebuiltin',
     method: 'get',
   });
 }

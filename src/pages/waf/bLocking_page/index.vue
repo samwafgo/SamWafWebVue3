@@ -4,7 +4,8 @@
       <t-row justify="space-between">
         <div class="left-operation-container">
           <t-button @click="handleAdd">{{ t('page.blocking_page.button_add_blocking_page') }}</t-button>
-          <t-button variant="outline" @click="openUnmatchedDialog">{{ t('page.blocking_page.unmatched.title') }}</t-button>
+          <t-button variant="outline" @click="openGlobalResponseDialog('not_match_website')">{{ t('page.blocking_page.unmatched.title') }}</t-button>
+          <t-button variant="outline" @click="openGlobalResponseDialog('backend_unavailable')">{{ t('page.blocking_page.backend_unavailable.title') }}</t-button>
         </div>
         <div class="right-operation-container">
           <t-form :data="searchformData" layout="inline" colon :style="{ marginBottom: '8px' }">
@@ -33,6 +34,9 @@
           </template>
           <template #attack_type="{ row }">
             <span>{{ getAttackTypeLabel(row.attack_type) }}</span>
+          </template>
+          <template #response_code="{ row }">
+            <span>{{ row.blocking_type === 'backend_unavailable' ? t('page.blocking_page.backend_unavailable.response_code') : row.response_code }}</span>
           </template>
           <template #content_priority="{ row }">
             <span>{{ getContentPriorityLabel(row.content_priority) }}</span>
@@ -206,46 +210,49 @@
     </t-dialog>
 
     <t-dialog
-      v-model:visible="unmatchedVisible"
-      :header="t('page.blocking_page.unmatched.title')"
+      v-model:visible="globalResponseVisible"
+      :header="t(`${globalResponseConfig.i18n}.title`)"
       :width="780"
       :footer="false"
-      :close-on-overlay-click="!unmatchedSaving"
-      :close-on-esc-keydown="!unmatchedSaving"
-      :close-btn="!unmatchedSaving"
+      :close-on-overlay-click="!globalResponseSaving"
+      :close-on-esc-keydown="!globalResponseSaving"
+      :close-btn="!globalResponseSaving"
     >
-      <p>{{ t('page.blocking_page.unmatched.description') }}</p>
+      <p>{{ t(`${globalResponseConfig.i18n}.description`) }}</p>
       <div style="width: 100%">
-        <t-radio-group v-model="unmatchedActiveTab" variant="default-filled" size="small" style="margin-bottom: 8px">
+        <t-radio-group v-model="globalResponseTab" variant="default-filled" size="small" style="margin-bottom: 8px">
           <t-radio-button value="edit">{{ t('page.blocking_page.editor_mode.code') }}</t-radio-button>
           <t-radio-button value="preview">{{ t('page.blocking_page.editor_mode.preview') }}</t-radio-button>
         </t-radio-group>
-        <div class="priority-tip">{{ t('page.blocking_page.unmatched.builtin_tip') }}</div>
-        <div class="priority-tip">{{ t('page.blocking_page.unmatched.variable_tip') }}</div>
-        <p v-if="unmatchedLoadError" role="alert">{{ t('page.blocking_page.unmatched.load_failed') }}</p>
-        <p v-else-if="builtinLoadError" class="priority-tip" role="alert">{{ t('page.blocking_page.unmatched.preview_builtin_failed') }}</p>
+        <div class="priority-tip">{{ t(`${globalResponseConfig.i18n}.builtin_tip`) }}</div>
+        <div class="priority-tip">{{ t(`${globalResponseConfig.i18n}.variable_tip`) }}</div>
+        <p v-if="globalResponseLoadError" role="alert">{{ t('page.blocking_page.global_response.load_failed') }}</p>
+        <p v-else-if="builtinLoadError" class="priority-tip" role="alert">
+          {{ t(globalResponseConfig.builtinError) }}
+        </p>
         <t-textarea
-          v-show="unmatchedActiveTab === 'edit'"
-          v-model="unmatchedData.response_content"
-          :disabled="unmatchedLoading || unmatchedLoadError || unmatchedSaving"
-          :placeholder="t('page.blocking_page.unmatched.placeholder')"
+          v-show="globalResponseTab === 'edit'"
+          v-model="globalResponseData.response_content"
+          :disabled="globalResponseLoading || globalResponseLoadError || globalResponseSaving"
+          :placeholder="t('page.blocking_page.global_response.placeholder')"
           :autosize="{ minRows: 12, maxRows: 20 }"
+          @change="globalResponseEdited = true"
         />
         <!-- sandbox 置空：预览框内不允许执行脚本、不同源，避免模板里的 JS 在管理端被执行 -->
-        <iframe v-show="unmatchedActiveTab === 'preview'" class="unmatched-preview-frame" sandbox="" :srcdoc="unmatchedPreviewHtml"></iframe>
+        <iframe v-show="globalResponseTab === 'preview'" class="global-response-preview-frame" sandbox="" :srcdoc="globalResponsePreviewHtml"></iframe>
       </div>
-      <div class="unmatched-actions">
+      <div class="global-response-actions">
         <t-button
           variant="outline"
-          :disabled="unmatchedLoading || unmatchedLoadError || unmatchedSaving || !builtinUnmatchedHtml"
-          @click="unmatchedData.response_content = builtinUnmatchedHtml"
-        >{{ t('page.blocking_page.unmatched.clear') }}</t-button>
-        <t-button variant="outline" :disabled="unmatchedSaving" @click="unmatchedVisible = false">{{ t('common.close') }}</t-button>
+          :disabled="globalResponseLoading || globalResponseLoadError || globalResponseSaving || !builtinResponseHtml"
+          @click="globalResponseData.response_content = builtinResponseHtml"
+        >{{ t('page.blocking_page.global_response.clear') }}</t-button>
+        <t-button variant="outline" :disabled="globalResponseSaving" @click="globalResponseVisible = false">{{ t('common.close') }}</t-button>
         <t-button
           theme="primary"
-          :loading="unmatchedSaving"
-          :disabled="!unmatchedLoaded || unmatchedLoading || unmatchedLoadError || unmatchedSaving"
-          @click="saveUnmatchedResponse"
+          :loading="globalResponseSaving"
+          :disabled="!canSaveGlobalResponse"
+          @click="saveGlobalResponse"
         >{{ t('common.confirm') }}</t-button>
       </div>
     </t-dialog>
@@ -265,7 +272,6 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import DOMPurify from 'dompurify';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin, type FormProps, type PageInfo, type TableProps } from 'tdesign-vue-next';
-import { getOnlineUrl } from '@/utils/usuallytool';
 import { allhost } from '@/apis/host';
 import {
   wafBlockingPageListApi,
@@ -274,6 +280,7 @@ import {
   wafBlockingPageAddApi,
   wafBlockingPageDetailApi,
   wafBlockingPageUnmatchedBuiltinApi,
+  wafBlockingPageBackendUnavailableBuiltinApi,
 } from '@/apis/blocking_page';
 
 const INITIAL_DATA = {
@@ -287,13 +294,33 @@ const INITIAL_DATA = {
   content_priority: 'samwaf',
 };
 
-const INITIAL_UNMATCHED_DATA = {
+const INITIAL_GLOBAL_RESPONSE_DATA = {
   ...INITIAL_DATA,
   id: '',
-  host_code: '',
-  blocking_type: 'not_match_website',
   response_header: '[]',
 };
+
+const GLOBAL_RESPONSES = {
+  not_match_website: {
+    i18n: 'page.blocking_page.unmatched',
+    responseCode: '403',
+    loadBuiltin: wafBlockingPageUnmatchedBuiltinApi,
+    requiresBuiltin: false,
+    builtinError: 'page.blocking_page.global_response.preview_builtin_failed',
+  },
+  backend_unavailable: {
+    i18n: 'page.blocking_page.backend_unavailable',
+    responseCode: '503',
+    loadBuiltin: wafBlockingPageBackendUnavailableBuiltinApi,
+    requiresBuiltin: true,
+    builtinError: 'page.blocking_page.backend_unavailable.builtin_failed',
+  },
+};
+type GlobalResponseType = keyof typeof GLOBAL_RESPONSES;
+
+function isGlobalResponseType(type: string): type is GlobalResponseType {
+  return Object.prototype.hasOwnProperty.call(GLOBAL_RESPONSES, type);
+}
 
 const DEFAULT_HEADER_LIST = [{ name: 'Content-Type', value: 'text/html' }];
 
@@ -315,17 +342,29 @@ const confirmVisible = ref(false);
 const formData = ref<Record<string, any>>({ ...INITIAL_DATA });
 const formEditData = ref<Record<string, any>>({ ...INITIAL_DATA });
 
-// 未匹配网站响应专用弹窗状态
-const unmatchedVisible = ref(false);
-const unmatchedActiveTab = ref<'edit' | 'preview'>('edit');
-const unmatchedLoading = ref(false);
-const unmatchedLoaded = ref(false);
-const unmatchedLoadError = ref(false);
-const unmatchedSaving = ref(false);
-let unmatchedLoadSequence = 0;
-const builtinUnmatchedHtml = ref('');
+const globalResponseType = ref<GlobalResponseType>('not_match_website');
+const globalResponseConfig = computed(() => GLOBAL_RESPONSES[globalResponseType.value]);
+const globalResponseVisible = ref(false);
+const globalResponseTab = ref<'edit' | 'preview'>('edit');
+const globalResponseLoading = ref(false);
+const globalResponseLoaded = ref(false);
+const globalResponseLoadError = ref(false);
+const globalResponseSaving = ref(false);
+const globalResponseEdited = ref(false);
+let globalResponseLoadSequence = 0;
+const builtinResponseHtml = ref('');
 const builtinLoadError = ref(false);
-const unmatchedData = ref<Record<string, any>>({ ...INITIAL_UNMATCHED_DATA });
+const globalResponseData = ref({ ...INITIAL_GLOBAL_RESPONSE_DATA });
+const canSaveGlobalResponse = computed(() =>
+  globalResponseVisible.value &&
+  globalResponseLoaded.value &&
+  !globalResponseLoading.value &&
+  !globalResponseLoadError.value &&
+  !globalResponseSaving.value &&
+  Boolean(globalResponseData.value.host_code) &&
+  // 需要确认后端支持该响应类型后才能保存。
+  (!globalResponseConfig.value.requiresBuiltin || Boolean(builtinResponseHtml.value)),
+);
 
 const rules: FormProps['rules'] = {
   blocking_page_name: [{ required: true, message: t('common.placeholder') + t('page.blocking_page.blocking_page_name'), type: 'error' }],
@@ -392,14 +431,13 @@ const confirmBody = computed(() => {
 });
 
 // 把模板占位符替换成演示数据后给预览用
-function buildPreviewHtml(content: string) {
+function buildPreviewHtml(content: string, demo: Record<string, string> = {
+  ...PREVIEW_PLACEHOLDER_VALUES,
+  SAMWAF_BLOCK_INFO: t('page.blocking_page.preview_demo_block_info'),
+}) {
   if (!content) {
     return '';
   }
-  const demo: Record<string, string> = {
-    ...PREVIEW_PLACEHOLDER_VALUES,
-    SAMWAF_BLOCK_INFO: t('page.blocking_page.preview_demo_block_info'),
-  };
   return DOMPurify.sanitize(content.replace(/\[\[\s*\.([A-Za-z0-9_]+)\s*\]\]/g, (match, key: string) =>
     Object.prototype.hasOwnProperty.call(demo, key) ? demo[key] : match,
   ));
@@ -408,36 +446,36 @@ function buildPreviewHtml(content: string) {
 const previewHtmlAdd = computed(() => buildPreviewHtml(formData.value.response_content));
 const previewHtmlEdit = computed(() => buildPreviewHtml(formEditData.value.response_content));
 
-const unmatchedPreviewHtml = computed(() => {
-  if (!(unmatchedData.value.response_content || '').trim()) {
-    if (!builtinUnmatchedHtml.value) return '';
-    const demo: Record<string, string> = { SAMWAF_HOST: PREVIEW_PLACEHOLDER_VALUES.SAMWAF_HOST };
-    return DOMPurify.sanitize(
-      builtinUnmatchedHtml.value.replace(/\[\[\s*\.([A-Za-z0-9_]+)\s*\]\]/g, (match, key: string) =>
-        Object.prototype.hasOwnProperty.call(demo, key) ? demo[key] : match,
-      ),
-    );
+const globalResponsePreviewHtml = computed(() => {
+  const custom = globalResponseData.value.response_content;
+  const hasCustom = Boolean(custom.trim());
+  const content = hasCustom ? custom : builtinResponseHtml.value;
+  const demo = { SAMWAF_HOST: PREVIEW_PLACEHOLDER_VALUES.SAMWAF_HOST };
+  if (globalResponseType.value === 'backend_unavailable') {
+    return buildPreviewHtml(content, { ...demo, SAMWAF_STATUS_CODE: globalResponseConfig.value.responseCode });
   }
-  return buildPreviewHtml(unmatchedData.value.response_content);
+  return buildPreviewHtml(content, hasCustom ? undefined : demo);
 });
 
-function loadBuiltinUnmatched(sequence: number) {
-  wafBlockingPageUnmatchedBuiltinApi()
-    .then((res) => {
-      if (sequence !== unmatchedLoadSequence || !unmatchedVisible.value) return;
-      if (res.code === 0 && typeof res.data === 'string') {
-        builtinUnmatchedHtml.value = res.data;
-        // 无自定义记录时，编辑区预填内置页面，保证编辑与预览内容一致
-        if (unmatchedVisible.value && !(unmatchedData.value.response_content || '').trim()) {
-          unmatchedData.value.response_content = res.data;
-        }
-      } else {
-        builtinLoadError.value = true;
-      }
-    })
-    .catch(() => {
-      if (sequence === unmatchedLoadSequence) builtinLoadError.value = true;
-    });
+function isCurrentGlobalResponseLoad(sequence: number) {
+  return sequence === globalResponseLoadSequence && globalResponseVisible.value;
+}
+
+async function loadGlobalResponseBuiltin(type: GlobalResponseType, sequence: number) {
+  try {
+    const res = await GLOBAL_RESPONSES[type].loadBuiltin();
+    if (!isCurrentGlobalResponseLoad(sequence)) return;
+    if (res.code !== 0 || typeof res.data !== 'string' || !res.data.trim()) {
+      builtinLoadError.value = true;
+      return;
+    }
+    builtinResponseHtml.value = res.data;
+    if (!globalResponseEdited.value && !globalResponseData.value.response_content.trim()) {
+      globalResponseData.value.response_content = res.data;
+    }
+  } catch {
+    if (isCurrentGlobalResponseLoad(sequence)) builtinLoadError.value = true;
+  }
 }
 
 function findGlobalHostCode(hosts: Record<string, any>[]) {
@@ -448,89 +486,93 @@ function findGlobalHostCode(hosts: Record<string, any>[]) {
   return candidates.length === 1 && typeof candidates[0].value === 'string' ? candidates[0].value : '';
 }
 
-async function openUnmatchedDialog() {
-  if (unmatchedSaving.value) return;
-  const sequence = ++unmatchedLoadSequence;
-  unmatchedVisible.value = true;
-  unmatchedActiveTab.value = 'edit';
-  unmatchedLoading.value = true;
-  unmatchedLoaded.value = false;
-  unmatchedLoadError.value = false;
-  builtinUnmatchedHtml.value = '';
+async function openGlobalResponseDialog(type: GlobalResponseType) {
+  if (globalResponseSaving.value) return;
+  const sequence = ++globalResponseLoadSequence;
+  globalResponseType.value = type;
+  globalResponseTab.value = 'edit';
+  globalResponseLoading.value = true;
+  globalResponseLoaded.value = false;
+  globalResponseLoadError.value = false;
+  globalResponseEdited.value = false;
+  builtinResponseHtml.value = '';
   builtinLoadError.value = false;
-  loadBuiltinUnmatched(sequence);
-  unmatchedData.value = {
-    ...INITIAL_UNMATCHED_DATA,
-    blocking_page_name: String(t('page.blocking_page.unmatched.title')),
+  globalResponseData.value = {
+    ...INITIAL_GLOBAL_RESPONSE_DATA,
+    blocking_page_name: t(`${globalResponseConfig.value.i18n}.title`),
+    blocking_type: type,
+    response_code: globalResponseConfig.value.responseCode,
   };
+  globalResponseVisible.value = true;
+  void loadGlobalResponseBuiltin(type, sequence);
   try {
     const hosts = await allhost();
-    if (sequence !== unmatchedLoadSequence || !unmatchedVisible.value) return;
+    if (!isCurrentGlobalResponseLoad(sequence)) return;
     if (hosts.code !== 0 || !Array.isArray(hosts.data)) throw new Error('Unable to load websites');
     const globalHostCode = findGlobalHostCode(hosts.data);
     if (!globalHostCode) throw new Error('Global website is unavailable');
-    unmatchedData.value.host_code = globalHostCode;
+    globalResponseData.value.host_code = globalHostCode;
     const res = await wafBlockingPageListApi({
       host_code: globalHostCode,
-      blocking_type: 'not_match_website',
+      blocking_type: type,
       pageIndex: 1,
       pageSize: 1,
     });
-    if (sequence !== unmatchedLoadSequence || !unmatchedVisible.value) return;
+    if (!isCurrentGlobalResponseLoad(sequence)) return;
     if (res.code !== 0 || !res.data || !(Array.isArray(res.data.list) || (res.data.list === null && res.data.total === 0))) {
       throw new Error('Unable to load response');
     }
     const record = (res.data.list || [])[0];
     if (record) {
-      if (!record.id || record.host_code !== globalHostCode || record.blocking_type !== 'not_match_website') {
+      if (!record.id || record.host_code !== globalHostCode || record.blocking_type !== type) {
         throw new Error('Unexpected response record');
       }
       const savedContent = record.response_content || '';
-      unmatchedData.value = {
-        ...unmatchedData.value,
+      globalResponseData.value = {
+        ...globalResponseData.value,
         ...record,
-        // 已存内容为空表示按内置页面生效；保留编辑区已有内容（内置预填或空），避免被空串覆盖
-        response_content: savedContent.trim() ? savedContent : unmatchedData.value.response_content,
+        // 已存正文为空时保留编辑区预填内容。
+        response_content: savedContent.trim() ? savedContent : globalResponseData.value.response_content,
         response_header: record.response_header ?? '[]',
       };
     }
-    unmatchedLoaded.value = true;
-  } catch (e) {
-    if (sequence !== unmatchedLoadSequence || !unmatchedVisible.value) return;
-    unmatchedLoadError.value = true;
+    globalResponseLoaded.value = true;
+  } catch {
+    if (isCurrentGlobalResponseLoad(sequence)) globalResponseLoadError.value = true;
   } finally {
-    if (sequence === unmatchedLoadSequence) unmatchedLoading.value = false;
+    if (sequence === globalResponseLoadSequence) globalResponseLoading.value = false;
   }
 }
 
-async function saveUnmatchedResponse() {
-  if (!unmatchedLoaded.value || unmatchedLoading.value || unmatchedLoadError.value || unmatchedSaving.value || !unmatchedData.value.host_code) return;
-  unmatchedSaving.value = true;
-  const custom = (unmatchedData.value.response_content || '').trim();
-  const builtin = (builtinUnmatchedHtml.value || '').trim();
-  const payload: Record<string, any> = {
-    ...unmatchedData.value,
-    blocking_type: 'not_match_website',
-    // 与内置页面一致或为空都按内置语义保存，避免无改动保存冻结模板
-    response_content: custom && custom !== builtin ? unmatchedData.value.response_content : '',
-    response_code: '403',
+async function saveGlobalResponse() {
+  if (!canSaveGlobalResponse.value) return;
+  globalResponseSaving.value = true;
+  const draft = globalResponseData.value;
+  const custom = draft.response_content.trim();
+  const builtin = builtinResponseHtml.value.trim();
+  const payload = {
+    ...draft,
+    blocking_type: globalResponseType.value,
+    // 与内置页面一致或为空都按内置语义保存，避免无改动保存冻结模板。
+    response_content: custom && custom !== builtin ? draft.response_content : '',
+    response_code: globalResponseConfig.value.responseCode,
     attack_type: '',
     content_priority: 'samwaf',
   };
   try {
     const res = await (payload.id ? wafBlockingPageEditApi(payload) : wafBlockingPageAddApi(payload));
     if (res.code !== 0) {
-      MessagePlugin.warning(res.msg || t('page.blocking_page.unmatched.save_failed'));
+      MessagePlugin.warning(res.msg || t('page.blocking_page.global_response.save_failed'));
       return;
     }
     MessagePlugin.success(res.msg);
-    unmatchedVisible.value = false;
+    globalResponseVisible.value = false;
     pagination.current = 1;
     getList();
-  } catch (e) {
-    MessagePlugin.warning(t('page.blocking_page.unmatched.save_failed'));
+  } catch {
+    MessagePlugin.warning(t('page.blocking_page.global_response.save_failed'));
   } finally {
-    unmatchedSaving.value = false;
+    globalResponseSaving.value = false;
   }
 }
 
@@ -609,8 +651,9 @@ function rehandlePageChange(pageInfo: PageInfo) {
 }
 
 function handleClickEdit(e: { row: Record<string, any> }) {
-  if (e.row.blocking_type === 'not_match_website') {
-    openUnmatchedDialog();
+  const type = e.row.blocking_type;
+  if (isGlobalResponseType(type)) {
+    openGlobalResponseDialog(type);
     return;
   }
   editFormVisible.value = true;
@@ -764,7 +807,7 @@ onMounted(() => {
   background-color: #fff;
 }
 
-.unmatched-preview-frame {
+.global-response-preview-frame {
   width: 100%;
   height: 440px;
   border: 1px solid var(--td-component-border);
@@ -772,7 +815,7 @@ onMounted(() => {
   background-color: #fff;
 }
 
-.unmatched-actions {
+.global-response-actions {
   display: flex;
   justify-content: flex-end;
   flex-wrap: wrap;
