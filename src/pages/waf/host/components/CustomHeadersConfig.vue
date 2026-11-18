@@ -122,7 +122,7 @@
                     @change="updateParent"
                   >
                     <template #suffix>
-                      <t-dropdown :options="variableOptions" @click="(data: any) => insertVariable(index, String(data.value))">
+                      <t-dropdown :options="isOriginHost(header.header_name) ? originHostOptions : variableOptions" @click="(data: any) => insertVariable(index, String(data.value))">
                         <t-button size="small" variant="text" style="padding: 0 4px">
                           <add-circle-icon style="margin-right: 4px" />
                           {{ t('page.host.custom_headers.insert_variable') }}
@@ -138,6 +138,9 @@
                 {{ t('common.delete') }}
               </t-button>
             </div>
+            <p v-if="isOriginHost(header.header_name)" class="origin-host-help">
+              {{ t('page.host.custom_headers.origin_host_help') }}
+            </p>
           </div>
         </div>
 
@@ -147,6 +150,9 @@
             <add-icon style="margin-right: 4px" />
             {{ t('page.host.custom_headers.add_header') }}
           </t-button>
+          <t-button v-if="!hasOriginHost" size="small" variant="outline" @click="addOriginHost">
+            {{ t('page.host.custom_headers.origin_host_add') }}
+          </t-button>
         </div>
       </div>
     </div>
@@ -154,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin } from 'tdesign-vue-next';
 import { InfoCircleIcon, AddCircleIcon, AddIcon, DeleteIcon, HelpCircleIcon } from 'tdesign-icons-vue-next';
@@ -192,6 +198,22 @@ function normalize(src: Record<string, any>) {
 }
 
 const localConfig = ref<Record<string, any>>(normalize(props.customHeadersConfig));
+const hasOriginHost = computed(() => localConfig.value.headers.some((header: { header_name: string }) => isOriginHost(header.header_name)));
+const originHostOptions = computed(() => [
+  { content: '${hostname} · ' + t('page.host.custom_headers.origin_host_no_port'), value: '${hostname}' },
+  { content: '${host} · ' + t('page.host.custom_headers.origin_host_keep_port'), value: '${host}' },
+]);
+
+function isOriginHost(name: string) {
+  return /^host$/i.test(name);
+}
+
+function addOriginHost() {
+  if (!hasOriginHost.value) {
+    localConfig.value.headers.push({ header_name: 'Host', header_value: '${hostname}' });
+    updateParent();
+  }
+}
 
 watch(
   () => props.customHeadersConfig,
@@ -221,8 +243,7 @@ function removeHeader(index: number) {
 function insertVariable(headerIndex: number, variable: string) {
   const header = localConfig.value.headers[headerIndex];
   if (header) {
-    // 追加到值末尾
-    header.header_value = (header.header_value || '') + variable;
+    header.header_value = isOriginHost(header.header_name) ? variable : (header.header_value || '') + variable;
     updateParent();
   }
 }
@@ -397,7 +418,16 @@ function addPresetHeader(type: 'client_ip' | 'forwarded_for' | 'real_ip' | 'cust
   height: 32px;
 }
 
+.origin-host-help {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
 .add-button-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px dashed var(--td-border-level-2-color);
