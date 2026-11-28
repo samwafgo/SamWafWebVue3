@@ -105,6 +105,10 @@ export default {
       exclude_scope_hint: "将排除：{entry}（这是情报里实际命中的那一条；若它是网段，整段都会被排除）",
       exclude_entry: "排除条目",
       exclude_reason_tpl: "{date} 经IP策略命中查询确认为误报；来源渠道：{scope}，查询IP：{ip}",
+      history_threat_title: "历史威胁情报触发记录（当前已不在生效名单内）",
+      history_threat_count: "累计 {count} 次",
+      history_threat_latest: "最近触发：{time}",
+      history_threat_reason: "可能原因：订阅源每日更新已将其移出、所属渠道已停用/删除，或收录阈值已调整；该IP当前不会被威胁情报拦截。",
       source: {
         ip_white: "IP白名单",
         ip_black: "IP黑名单",

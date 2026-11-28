@@ -105,6 +105,10 @@ export default {
       exclude_scope_hint: "Will exclude: {entry} (this is the entry that actually matched; if it is a CIDR, the whole range is excluded)",
       exclude_entry: "Entry",
       exclude_reason_tpl: "{date} confirmed false positive via IP policy match lookup; feed: {scope}, queried IP: {ip}",
+      history_threat_title: "Historical threat-intel hits (no longer on any active feed)",
+      history_threat_count: "{count} hits",
+      history_threat_latest: "Latest: {time}",
+      history_threat_reason: "Possible reasons: removed in a daily feed refresh, the channel was disabled or deleted, or the threshold was raised. This IP is not currently blocked by threat-intel feeds.",
       source: {
         ip_white: "IP allowlist",
         ip_black: "IP blocklist",

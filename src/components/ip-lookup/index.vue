@@ -85,7 +85,7 @@
                   <!-- 威胁情报的误报只能在本地排除：订阅源是全量快照，手工从防火墙删掉下次同步就回来。
                        这里直接带上 hit.matched(实际命中的那条原文，可能是网段)去排除，
                        用户不必自己判断该排单IP还是整段——排错了方向是最常见的"排了没生效" -->
-                  <a v-if="hit.source === 'threat_ip'" class="ipl-exclude-link" @click="openExclude(hit)">
+                  <a v-if="hit.source === 'threat_ip' && hit.effect === 'block'" class="ipl-exclude-link" @click="openExclude(hit)">
                     {{ t('common.ip_lookup.exclude_btn') }}
                   </a>
                   <t-button
@@ -102,6 +102,21 @@
                 </div>
                 <div v-if="hit.detail" class="ipl-detail">{{ hit.detail }}</div>
               </div>
+            </div>
+
+            <!-- 当前未命中启用中的威胁情报，但 ip_tags 留存历史触发记录：解释为何首页/日志仍挂标签 -->
+            <div v-if="showHistoryThreatHint" class="ipl-history-box">
+              <div class="ipl-history-title">{{ t('common.ip_lookup.history_threat_title') }}</div>
+              <div class="ipl-history-list">
+                <div v-for="(item, idx) in result.history_threat_tags" :key="idx" class="ipl-history-item">
+                  <t-tag theme="warning" variant="light" size="small">{{ item.tag }}</t-tag>
+                  <span class="ipl-history-meta">{{ t('common.ip_lookup.history_threat_count', { count: item.count }) }}</span>
+                  <span v-if="item.latest_time" class="ipl-history-meta">
+                    {{ t('common.ip_lookup.history_threat_latest', { time: item.latest_time }) }}
+                  </span>
+                </div>
+              </div>
+              <div class="ipl-history-reason">{{ t('common.ip_lookup.history_threat_reason') }}</div>
             </div>
 
             <!-- 排除表单：就地填，不跳页 -->
@@ -231,6 +246,12 @@ type Hit = {
   system_layer?: boolean;
 };
 
+type HistoryThreatTag = {
+  tag: string;
+  count: number;
+  latest_time?: string;
+};
+
 const props = withDefaults(
   defineProps<{
     /** 预填的 IP，比如从日志某一行点进来 */
@@ -263,7 +284,14 @@ const queried = ref(false);
 const partialDone = ref(false);
 const ip = ref('');
 const groupState = reactive<Record<string, string>>({});
-const result = reactive({ ip: '', location: '', query_note: '', hits: [] as Hit[], degraded: [] as string[] });
+const result = reactive({
+  ip: '',
+  location: '',
+  query_note: '',
+  hits: [] as Hit[],
+  degraded: [] as string[],
+  history_threat_tags: [] as HistoryThreatTag[],
+});
 
 const hostDic = ref<Record<string, string>>({});
 const hostLoading = ref(false);
@@ -292,6 +320,8 @@ const groups = computed(() => [
 const systemLayerHits = computed(() => result.hits.filter((h) => h.system_layer && h.effect === 'block'));
 const systemLayerBlocked = computed(() => systemLayerHits.value.length > 0);
 const systemLayerText = computed(() => systemLayerHits.value.map((h) => `${h.source_name}｜${h.scope}`).join('；'));
+const hasActiveThreatHit = computed(() => result.hits.some((h) => h.source === 'threat_ip' && h.effect === 'block'));
+const showHistoryThreatHint = computed(() => !hasActiveThreatHit.value && result.history_threat_tags.length > 0);
 
 // 一堆命中里用户最想先知道的是「到底放行还是拦截」，白名单优先于黑名单
 const verdict = computed(() => {
@@ -345,6 +375,7 @@ function resetResult(nextIp = '') {
   result.query_note = '';
   result.hits = [];
   result.degraded = [];
+  result.history_threat_tags = [];
 }
 
 // 按来源分批并发查：名单类和缓存类几十毫秒就回来了，
@@ -378,6 +409,9 @@ function doQuery() {
         if (d.location && !result.location) result.location = d.location;
         result.hits = result.hits.concat(d.hits || []);
         result.degraded = result.degraded.concat(d.degraded || []);
+        if (d.history_threat_tags && d.history_threat_tags.length) {
+          result.history_threat_tags = result.history_threat_tags.concat(d.history_threat_tags);
+        }
         groupState[g.key] = 'done';
         // 每批回来就先渲染，用户能立刻看到已完成部分
         queried.value = true;
@@ -743,6 +777,47 @@ defineExpose({ open });
 
 .ipl-detail {
   margin-top: 4px;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+  line-height: 1.6;
+}
+
+.ipl-history-box {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--td-radius-default);
+  background: var(--td-bg-color-secondarycontainer);
+  border-left: 3px solid var(--td-warning-color);
+}
+
+.ipl-history-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.ipl-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.ipl-history-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.ipl-history-meta {
+  color: var(--td-text-color-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.ipl-history-reason {
+  margin-top: 8px;
   font-size: 12px;
   color: var(--td-text-color-secondary);
   line-height: 1.6;

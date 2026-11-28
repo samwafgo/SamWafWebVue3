@@ -229,8 +229,8 @@ function formatNum(num: number) {
 .ip-tag-pop {
   display: flex;
   flex-direction: column;
-  width: 330px;
-  max-height: 340px;
+  width: 380px;
+  max-height: 360px;
 }
 
 .ip-tag-pop__head {
@@ -305,9 +305,8 @@ function formatNum(num: number) {
 .ip-tag-pop__name {
   font-size: 12.5px;
   color: var(--td-text-color-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.4;
+  word-break: break-word;
 }
 
 .ip-tag-pop__num {
