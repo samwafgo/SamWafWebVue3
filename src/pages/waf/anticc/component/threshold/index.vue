@@ -23,7 +23,7 @@
       <!-- eslint-disable-next-line vue/no-v-html -->
       <div class="th-summary" v-html="summaryHtml"></div>
       <div v-if="data.scope_note" class="th-note">{{ data.scope_note }}</div>
-      <div v-if="data.sampled" class="th-note">{{ t('page.ccrule.th_sampled', { days: data.days }) }}</div>
+      <div v-if="data.sampled" class="th-note">{{ sampledText }}</div>
 
       <div class="th-stats">
         <div>
@@ -135,9 +135,20 @@ const tiers = computed(() => {
     { key: 'strict', value: data.value.strict, name: t('page.ccrule.th_strict'), desc: t('page.ccrule.th_strict_desc') },
   ];
 });
-const metaText = computed(() =>
-  data.value ? t('page.ccrule.th_meta', { days: data.value.days, window: data.value.window_sec }) : '',
-);
+const metaText = computed(() => {
+  if (!data.value) return '';
+  if (data.value.sample_hours > 0 && data.value.sample_hours < 24) {
+    return t('page.ccrule.th_meta_hours', { hours: data.value.sample_hours, window: data.value.window_sec });
+  }
+  return t('page.ccrule.th_meta', { days: data.value.days, window: data.value.window_sec });
+});
+const sampledText = computed(() => {
+  if (!data.value) return '';
+  if (data.value.sample_hours > 0 && data.value.sample_hours < 24) {
+    return t('page.ccrule.th_sampled_hours', { hours: data.value.sample_hours });
+  }
+  return t('page.ccrule.th_sampled', { days: data.value.days });
+});
 const summaryHtml = computed(() => {
   if (!data.value) return '';
   return t('page.ccrule.th_summary', {

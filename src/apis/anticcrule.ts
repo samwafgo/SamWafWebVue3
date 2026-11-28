@@ -78,6 +78,7 @@ export function wafAntiCCRuleThresholdRecommendApi(params: Record<string, any>) 
     url: '/wafhost/anticcrule/threshold/recommend',
     method: 'post',
     data: params,
+    timeout: 25000,
   });
 }
 
